@@ -1,0 +1,440 @@
+##########################################################################
+#   Copyright (C) 2003  Moxa Inc.
+#   All Rights Reserved.
+#
+#
+# Version History :
+#   date        author      comment
+#   12/04/2003  James       first version
+#   07/01/2004  James       compatible with Real TTY V1
+##########################################################################
+
+################################################################################
+# define value and default value setting
+################################################################################
+DirTmp=$0
+DirTmp=${DirTmp%/mxinst}
+TempDir=$DirTmp
+
+NPPATH="/usr/lib/npreal2"
+ProductName="MOXA NPort Server Real TTY Driver"
+ProductVer=`awk '{if($2=="NPREAL_VERSION"){print $3}}' np_ver.h`
+OS="linux"
+Device=""
+check=""
+EntryPwd=`pwd`
+
+driverPath="/usr/lib/npreal2/driver"
+MX_MOD=npreal2
+
+#Parameters
+MX_VERSION=5
+MX_PATCH_LEVEL=3
+MX_SUBLEVEL=0
+MX_VERSION_CODE=$(( ($MX_VERSION<<16)+($MX_PATCH_LEVEL<<8)+$MX_SUBLEVEL ))
+MX_VERSION_MIN=$(( ($MX_VERSION<<16)+(0<<8)+0 ))
+
+K_MODULE_VERSION=$(uname -r)
+K_RELEASE=$(echo $K_MODULE_VERSION | sed -e "s/-.*//g")
+K_VERSION=$(echo $K_RELEASE | cut -d '.' -f 1)
+K_PATCH_LEVEL=$(echo $K_RELEASE | cut -d '.' -f 2)
+K_SUBLEVEL=$(echo $K_RELEASE | cut -d '.' -f 3)
+K_VERSION_CODE=$(( ($K_VERSION<<16)+($K_PATCH_LEVEL<<8)+$K_SUBLEVEL ))
+
+K_SOURCE=/lib/modules/$K_MODULE_VERSION/build
+LINUX_DIS=$(grep '[0-9]' /etc/issue )
+
+################################################################################
+# interrupt_quit1()
+#   to quit install by interrupt or quit
+################################################################################
+interrupt_quit1() {
+    echo "\nInstallation aborted by INTERRUPT !"
+    exit 1
+}
+################################################################################
+# interrupt_quit2()
+#   to quit install by interrupt or quit
+################################################################################
+interrupt_quit2() {
+    echo "\nInstallation aborted by INTERRUPT !"
+    clean_tempfile
+    exit 1
+}
+
+interrupt_nothing1() {
+    exit 1
+}
+
+interrupt_nothing2() {
+    clean_tempfile
+    exit 1
+}
+
+################################################################################
+# clean_tempfile()
+################################################################################
+#clean_tempfile () {
+#    [ -d $TempDir ] && {
+#        rm -rf $TempDir > /dev/null 2>&1
+#    }
+#    [ -d $NPPATH ] && {
+#        rm -rf $NPPATH > /dev/null 2>&1
+#    }
+#    sync; sync
+#}
+
+clean_tempfile () {
+     sync;
+}
+################################################################################
+# get_OsName()
+#   get the OS name.
+################################################################################
+get_OsName() {
+    if [ -f /etc/redhat-release ]
+    then
+        OS="linux"
+    elif [ -f /etc/SuSE-release ]
+    then
+        OS="SuSE"
+    elif [ -f /etc/gentoo-release ]
+    then
+        OS="gentoo"
+    elif [ -f /etc/debian_version ]
+    then
+        OS="debian"
+    fi
+}
+
+################################################################################
+# check_env()
+#   Check the environment for installation
+################################################################################
+check_env() {
+#Check kernel source
+if test  ! -e $K_SOURCE
+then
+echo "*********************************ERROR********************************"
+echo " Unable to locate matching source for kernel $K_MODULE_VERSION."
+echo " Please install proper kernel-header/source or contact support@moxa.com."
+echo "**********************************************************************"
+exit 1
+fi
+
+#Check supported kernel version
+if test $MX_VERSION_MIN -gt $K_VERSION_CODE
+then
+echo "********************************WARNING**********************************"
+echo " $ProductName only support kernel $MX_VERSION.0 or later versions."
+echo " That may not be compatible with Linux Kernel versions $K_MODULE_VERSION ."
+echo " To download the available driver, please visit Moxa at: http://www.moxa.com"
+echo " If you have questions, please contact Moxa support at: support@moxa.com"
+echo "*************************************************************************"
+echo "Press enter to continue..."
+read any
+fi
+
+#Check supported kernel version
+if test $MX_VERSION_CODE -lt $K_VERSION_CODE
+then
+echo "********************************WARNING**********************************"
+echo " $ProductName has been tested under kernel $MX_VERSION.$MX_PATCH_LEVEL.$MX_SUBLEVEL."
+echo " That may not be compatible with Linux Kernel versions $K_MODULE_VERSION ."
+echo " To download the available driver, please visit Moxa at: http://www.moxa.com"
+echo " If you have questions, please contact Moxa support at: support@moxa.com"
+echo "*************************************************************************"
+echo "Press enter to continue..."
+read any
+fi
+}
+
+
+########################################################
+#
+# Main procedures
+# To read the shell program input argument and process it.
+#
+########################################################
+trap interrupt_quit1 1 3 9 15           # trap signal
+trap interrupt_nothing1 2
+
+if [ "$#" -ge 3 ]
+then
+    print_usage
+    exit 1
+fi
+
+echo -n "
+===============================================================================
+Copyright (C) 2002-2019  Moxa Inc.
+All Rights Reserved.
+
+$ProductName "
+
+echo -n $ProductVer | sed s/\"//g
+
+echo " Installation.
+System Information: Kernel `uname -r`; Machine `uname -m`.
+===============================================================================
+"
+
+check_env 
+
+get_OsName
+
+if [ "$OS" = "debian" ] 
+then
+    touch /etc/init.d/npreals
+fi
+
+trap interrupt_quit2 1 3 9 15       # trap signal
+trap interrupt_nothing2 2           # trap signal SIGINT
+
+
+########################################################
+# check configuration file. (npreal2d.cf)
+########################################################
+if [ -f /usr/lib/npreal2/driver/npreal2d.cf ]
+then
+    echo 'There is an Real TTY Driver installed in your system.'
+    echo 'Continue to install will overwrite the old driver.'
+    echo 'Do you want to continue installing? [y/N].'
+
+    read check
+    case $check in
+    [n])
+        exit 0
+        ;;
+    [N])
+        exit 0
+        ;;
+    [y])
+        ;;
+    [Y])
+        ;;
+    *)
+        exit 0
+        ;;
+    esac
+fi
+
+########################################################
+# rmmove module
+########################################################
+ps -ef | grep npreal2d | awk '$0 !~ /grep/ {system("kill -15 "$2)}'
+ps -ef | grep npreal2d | awk '$0 !~ /grep/ {system("kill -9 "$2)}'
+lsmod | grep npreal2 |
+awk '$0 != "" {system("rmmod npreal2")}'
+
+
+########################################################
+# install driver
+########################################################
+echo ''
+
+echo "Building driver..."
+
+mkdir -p /lib/modules/`uname -r`/kernel/drivers/char > /dev/null 2>&1
+mkdir -p /lib/modules/`uname -r`/misc > /dev/null 2>&1
+
+echo
+echo 'If you want to use secure communication with target,'
+echo 'you might choose [y] to enable the SSL function.'
+echo 'Note: This function support RealCOM with secure mode only.'
+echo 'Do you want to enable secure function? [y/N].'
+
+read check
+case $check in
+[n])
+    if [ "$1" = "SP1" ]
+    then
+        make $1 PATH1=$(pwd)
+	elif [ "$1" = "polling" ]
+	then
+		make clean
+		make all PATH1=$(pwd) POLLING=-DOFFLINE_POLLING
+    else
+        make all PATH1=$(pwd)
+    fi 
+    ;;
+[N])
+    if [ "$1" = "SP1" ]
+    then
+        make $1 PATH1=$(pwd)
+	elif [ "$1" = "polling" ]
+	then
+		make clean
+		make all PATH1=$(pwd) POLLING=-DOFFLINE_POLLING
+    else
+        make all PATH1=$(pwd)
+    fi 
+    ;;
+[y])
+	if [ "$1" = "SP1" ]
+	then
+		make SP1_ssl PATH1=$(pwd)
+	elif [ "$1" = "m64" ]
+	then
+		make ssl64 PATH1=$(pwd)
+	elif [ "$1" = "mppc64" ]
+	then
+		make ppc64 PATH1=$(pwd)
+	elif [ "$1" = "SP1_m64" ]
+	then
+		make SP1_ssl64 PATH1=$(pwd)
+	elif [ "$1" = "polling" ]
+	then
+		make clean
+		make ssl PATH1=$(pwd) POLLING=-DOFFLINE_POLLING
+	elif [ "$1" = "concurrent_open" ]
+	then
+		make ssl_con PATH1=$(pwd)	
+	else
+		make ssl PATH1=$(pwd)
+	fi 
+    ;;
+[Y])
+	if [ "$1" = "SP1" ]
+	then
+		make SP1_ssl PATH1=$(pwd)
+	elif [ "$1" = "m64" ]
+	then
+		make ssl64 PATH1=$(pwd)
+	elif [ "$1" = "mppc64" ]
+	then
+		make ppc64 PATH1=$(pwd)
+	elif [ "$1" = "SP1_m64" ]
+	then
+		make SP1_ssl64 PATH1=$(pwd)
+	elif [ "$1" = "polling" ]
+	then
+		make clean
+		make ssl PATH1=$(pwd) POLLING=-DOFFLINE_POLLING
+	else
+		make ssl PATH1=$(pwd)
+	fi 
+    ;;
+*)
+	if [ "$1" = "polling" ]
+	then
+		make clean
+		make all PATH1=$(pwd) POLLING=-DOFFLINE_POLLING
+	else
+		make $1 PATH1=$(pwd)
+	fi
+    ;;
+esac
+
+echo "Check Driver..."
+[ -e $MX_MOD.o -a -e npreal2d.o -a -e npreal2d_redund ] || {
+    echo "FAILED !!!"
+    echo " "
+    echo "Install Not Completed !"
+    echo " "
+    clean_tempfile
+    exit 0
+}
+
+
+########################################################
+# Process File
+########################################################
+#$TempDir/npfile
+
+flag=0
+
+mkdir -p $NPPATH > /dev/null 2>&1
+mkdir -p $driverPath > /dev/null 2>&1
+mkdir -p $NPPATH/tmp > /dev/null 2>&1
+
+[ -f /usr/lib/npreal2/driver/npreal2d.cf ] || {
+    echo -n "Copying configurations files ... "
+    cp -f $(pwd)/npreal2d.cf $driverPath
+
+    flag=$?
+    [ $flag = 0 ] ||    {
+        echo "FAILED! ($flag)"
+        exit 0
+    }
+    echo "OK!"
+}
+
+
+### driver ###
+NowPath=$(pwd)
+echo -n "Copying driver files ... "
+cp -f $NowPath/killp       $driverPath
+cp -f $NowPath/npreal2d_redund    $driverPath
+cp -f $NowPath/npreal2d    $driverPath
+#cp -f $NowPath/$MX_MOD   $driverPath
+cp -f $NowPath/Makefile    $driverPath
+cp -f $NowPath/npreal2d.c  $driverPath
+cp -f $NowPath/npreal2.h  $driverPath
+cp -f $NowPath/npreal2d.cf $driverPath/config
+cp -f $NowPath/npreal2.c   $driverPath
+#cp -f $NowPath/linux.mak   $driverPath
+cp -f $NowPath/mxaddsvr    $driverPath
+cp -f $NowPath/mxdelsvr    $driverPath
+cp -f $NowPath/mxcfmat     $driverPath
+cp -f $NowPath/mxloadsvr   $driverPath
+cp -f $NowPath/mxmknod     $driverPath
+cp -f $NowPath/mxrmnod     $driverPath
+cp -f $NowPath/mxuninst    $driverPath
+cp -f $NowPath/mxsetsec    $driverPath
+cp -f $NowPath/README.TXT  $NPPATH
+cp -f $NowPath/VERSION.TXT $NPPATH
+echo "OK!"
+
+
+
+### module ###
+#cp -f $driverPath/npreal2.o /lib/modules/`uname -r`/kernel/drivers/char
+#cp -f $driverPath/npreal2.o /lib/modules/`uname -r`/misc
+
+
+ps -ef | grep npreal2 |
+awk '$0 !~ /grep/ {system("kill -15 "$2)}'
+ps -ef | grep npreal2 |
+awk '$0 !~ /grep/ {system("kill -9 "$2)}'
+
+
+
+
+
+########################################################
+# load module
+########################################################
+echo "Load driver..."
+modprobe $MX_MOD 
+[ "$?" = "0" ] || {
+    echo ""
+    echo "Failed!!!  please contact the provider"
+    echo ""
+    exit 0
+}
+echo "OK!"
+
+
+########################################################
+# Delete the line with npreal2 and append
+# "modprobe npreal2" in /etc/rc.d/rc.local.
+########################################################
+
+
+cd $NPPATH/driver
+./mxloadsvr install
+echo ''
+
+echo "
+===============================================================================
+Installation process is completed.
+The all driver files are installed on /usr/lib/npreal2/driver.
+Now you can "cd /usr/lib/npreal2/driver" and run "./mxaddsvr" to add tty port.
+===============================================================================
+"
+
+#[ -d $TempDir ] && {
+#    rm -rf $TempDir > /dev/null 2>&1
+#}
+
