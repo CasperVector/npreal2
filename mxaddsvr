@@ -1,0 +1,51 @@
+#!/bin/sh
+
+CONFIG="${CONFIG:-/usr/lib/npreal2/driver/npreal2d.cf}"
+data0=950
+cmd0=966
+iface0='0'
+
+die_usage() {
+	echo 'Usage:'
+	echo "    $0 server_ip num_port [data_port] [cmd port] [interface]"
+	echo "    $0 -r server_ip backup_ip num_port [data_port] [cmd port] [interface]"
+	exit 1
+}
+
+get_minor() {
+	grep -v '#|^$|ttymajor|calloutmajor' "$1" | awk '
+		BEGIN { for (i = 0; i < 256; ++i) a[i] = 0 } { a[$1] = 1 }
+		END { for (i = 0; i < 256; ++i) if (!a[i]) { print i; break } }
+	'
+}
+
+if [ "$1" = '-r' ]; then
+	shift; mode=1
+	[ "$#" -gt 2 ] || die_usage
+	server="$1"; shift
+	backup="$1"; shift
+	nport="$1"; shift
+else
+	mode=0
+	[ "$#" -gt 1 ] || die_usage
+	server="$1"; shift
+	nport="$1"; shift
+fi
+data="${1:-"$data0"}"; shift
+cmd="${1:-"$cmd0"}"; shift
+iface="${1:-"$iface0"}"; shift
+
+if awk "!/#|^\$|ttymajor|calloutmajor/ &&
+	(\$2 == \"$server\" || \$11 == \"$server\")" \
+	< "$CONFIG" | grep -q '.'; then
+	echo "Specified server already present in \`$CONFIG'"
+	exit 1
+fi
+
+for i in $(seq 0 "$(expr "$nport" - 1)"); do
+	minor="$(get_minor "$CONFIG")"
+	printf '%s\t%s\t%s\t%s\t%d\t%d\tttyr%02x\tcur%02x\t%s\t%d\t%s\n' \
+		"$minor" "$server" "$(expr "$data" + "$i")" "$(expr "$cmd" + "$i")" \
+		1 0 "$minor" "$minor" "$iface" "$mode" "$backup" >> "$CONFIG"
+done
+

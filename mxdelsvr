@@ -1,0 +1,13 @@
+#!/bin/sh
+
+CONFIG="${CONFIG:-/usr/lib/npreal2/driver/npreal2d.cf}"
+if [ "$#" -eq 0 ]; then
+	echo "Usage: $0 server_ip"
+	exit 1
+fi
+
+cp -a "$CONFIG" "$CONFIG".tmp
+awk "/#|^\$|ttymajor|calloutmajor/ || (\$2 != \"$1\" && \$11 != \"$1\")" \
+	< "$CONFIG" > "$CONFIG".tmp
+mv -f "$CONFIG".tmp "$CONFIG"
+

@@ -1,0 +1,12 @@
+#!/bin/sh
+
+DRIVER=/var/npreal2/module
+KVER="${KVER:-"$(uname -r)"}"
+KERNEL="${KERNEL:-"/usr/src/kernels/$KVER"}"
+
+make -C "$KERNEL" M="$DRIVER" "$@"
+if [ "$1" != 'clean' ]; then
+	cp "$DRIVER"/npreal2.ko /lib/modules/"$KVER"/kernel/drivers/char
+	depmod -a "$KVER"
+fi
+
