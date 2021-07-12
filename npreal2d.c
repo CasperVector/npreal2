@@ -38,9 +38,7 @@
 
 #include	<resolv.h> // for res_init()
 #include	<arpa/inet.h>
-#include	"redund.h"
 #include	"npreal2d.h"
-//#include	"misc.h"
 
 void _log_event_backup(char *log_pathname, char *msg);
 int ipv4_str_to_ip(char *str, ulong *ip);

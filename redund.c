@@ -36,7 +36,6 @@
 #include	<arpa/inet.h>
 #include	"redund.h"
 #include    "npreal2d.h"
-//#include	"misc.h"
 
 #define		CON_TIME			1000000 /* connection time   : micro-second */
 #define		RE_TIME				5000000 /* reconnection time : micro-second */
@@ -49,6 +48,9 @@ int Gkeep_idle = 1;   			/* idle time (sec)*/
 int Gkeep_interval = 3;			/* interval time (sec) */
 int Gkeep_count = 2;			/* try how many time */
 pthread_mutex_t Gmutex = PTHREAD_MUTEX_INITIALIZER;
+#ifdef	SSL_ON
+extern SSL_CTX *sslc_ctx;
+#endif
 
 int connect_nonb(int fd, struct sockaddr_in *sockaddr, socklen_t socklen, int usec);
 

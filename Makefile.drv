@@ -1,0 +1,6 @@
+ifdef CONCURRENT
+KCPPFLAGS += -DCONCURRENT_SSL
+endif
+
+obj-m = npreal2.o
+
