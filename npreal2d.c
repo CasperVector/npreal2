@@ -27,6 +27,7 @@
 #include	<unistd.h>
 #include	<fcntl.h>
 #include	<signal.h>
+#include	<syslog.h>
 #include	<sys/ioctl.h>
 #include	<sys/sysinfo.h>
 #ifdef	STREAM
@@ -40,7 +41,6 @@
 #include	<arpa/inet.h>
 #include	"npreal2d.h"
 
-void _log_event_backup(char *log_pathname, char *msg);
 int ipv4_str_to_ip(char *str, ulong *ip);
 int ipv6_str_to_ip(char *str, unsigned char *ip);
 
@@ -52,7 +52,6 @@ int		Gredund_mode = 0;
 int		ttys, servers;
 TTYINFO 	ttys_info[MAX_TTYS];
 SERVINFO	serv_info[MAX_TTYS];
-char		EventLog[160];		/* Event log file name */
 int		pipefd[2];
 int		maxfd;
 int     timeout_time = 0;
@@ -85,7 +84,6 @@ void moxattyd_handle_ttys();
 void poll_nport_send(SERVINFO *servp);
 void poll_async_server_recv();
 void poll_async_server_send(SERVINFO *servp);
-void moxattyd_daemon_start();
 int CheckConnecting();
 
 #ifdef SSL_ON
@@ -136,7 +134,11 @@ char *	argv[];
 	/*
 	 * Initialize this Moxa TTYs daemon process.
 	 */
-	moxattyd_daemon_start();
+	openlog ("npreal2d", LOG_PID, LOG_DAEMON);
+	if (daemon (0, 0)) {
+		log_event ("Failed to daemonize");
+		return -1;
+	}
 
 	/*
 	 * Initialize polling NPort and Async Server function.
@@ -484,7 +486,6 @@ char *	cmdpath;
 	 * Prepare the full-path file names of LOG/Configuration.
 	 */
 	sprintf(buf,"%s/npreal2d.cf", workpath);        /* Config file name */
-	sprintf(EventLog,"%s/npreal2d.log", workpath);  /* Log file name */
 	strcpy(Gcffile, buf);
 
 	/*
@@ -707,89 +708,6 @@ char *	cmdpath;
 	if ( ttys == 0 )
 		log_event("Have no any TTY configured record !");
 	return(ttys);
-}
-
-/*
- *	Initialize a daemon process & detach a daemon process from login
- *	session context.
- */
-void moxattyd_daemon_start()
-{
-	register int	childpid, fd;
-
-	/*
-	 * If we were started by init (process 1) from the /etc/inittab file
-	 * there's no need to detach.
-	 * This test is unreliable due to an unavoidable ambiguity if the
-	 * process is started by some other process and orphaned (i.e., if
-	 * the parent process terminates before we are started).
-	 */
-	if ( getppid() == 1 )
-		goto next;
-
-	/*
-	 * If we were not started in the background, fork and let the parent
-	 * exit. This also guarantees the first child is not a process group
-	 * leader.
-	 */
-	if ( (childpid = fork()) < 0 )
-	{
-		log_event("Can't fork first child !");
-		exit(0);
-	}
-	else if ( childpid > 0 )
-		exit(0);		/* parent process */
-
-	/*
-	 * Disassociate from controlling terminal and process group.
-	 * Ensure the process can't reacquire a new controlling terminal.
-	 */
-#ifdef	TIOCNOTTY
-
-	if ( (fd = open("/dev/tty", O_RDWR)) >= 0 )
-	{
-		ioctl(fd, TIOCNOTTY, (char *)NULL);
-		close(fd);
-	}
-
-#else
-
-	if ( setpgrp() == -1 )
-	{
-		log_event("Can't change process group !");
-		exit(0);
-	}
-	if ( (childpid = fork()) < 0 )
-	{
-		log_event("Can't fork second child !");
-		exit(0);
-	}
-	else if ( childpid > 0 )
-		exit(0);		/* parent process */
-
-#endif
-
-	next:
-	/*
-	 * Close any open files descriptors.
-	 */
-#if 1
-	close(0);
-	close(1);
-	close(2);
-#endif
-	errno = 0;
-
-	/*
-	 * Move the current directory to root, to make sure we aren't on a
-	 * mounted filesystem.
-	 */
-	chdir("/");
-
-	/*
-	 * Clear any inherited file mode creation mask.
-	 */
-	umask(0);
 }
 
 /*
@@ -2635,7 +2553,7 @@ void ConnectCheck()
 void log_event(msg)
 char *	msg;
 {
-    _log_event_backup(EventLog, msg);
+	syslog (LOG_INFO, "%s", msg);
 }
 
 #ifdef	SSL_ON
@@ -2665,83 +2583,6 @@ static void ssl_init(void)
 	SSL_CTX_set_mode(sslc_ctx, SSL_MODE_AUTO_RETRY);
 }
 #endif
-
-void _log_event_backup(char *log_pathname, char *msg)
-{
-#define MAX_BACKUP_FILE 16
-#define MAX_LOG_SIZE 10485760L
-	FILE *		fd;
-	time_t		t;
-	struct tm	*tt;
-	char		tmp[256];
-	unsigned long sz = 0;
-    static int bak_no = 0;
-
-	t = time(0);
-	tt = localtime(&t);
-	/*
-	 * Open Log file as append mode.
-	 */
-	fd = fopen(log_pathname, "a+");
-	if ( fd )
-	{
-		sprintf(tmp, "%02d-%02d-%4d %02d:%02d:%02d  ",
-				tt->tm_mon + 1, tt->tm_mday, tt->tm_year+1900,
-				tt->tm_hour, tt->tm_min, tt->tm_sec);
-		fputs(tmp, fd);
-		fputs(msg, fd);
-		fputs("\n", fd);
-		fseek(fd, 0L, SEEK_END);
-		sz = ftell(fd);
-		fclose(fd);
-
-		if(sz > (MAX_LOG_SIZE)){
-			//TODO: Solve strange problem that I call below command and get program crash.
-			//sprintf(tmp, "mv --backup= %s.bak %s.bak.old", EventLog, EventLog);
-			//system(tmp);
-
-			//if( bak_no==0 ){
-			{
-				int f_no=1;
-				FILE * bak_fd;
-				struct stat st_last={0};
-				struct stat st_curr;
-
-				// Look for the available backup number to save.
-				while(1){
-					sprintf(tmp, "%s.~%d~", log_pathname, f_no);
-					bak_fd = fopen(tmp, "r");
-					if( bak_fd==NULL ){
-						bak_no = f_no;
-						break;
-					}
-					fclose(bak_fd);
-					stat( tmp, &st_curr );
-					if( st_curr.st_mtime < st_last.st_mtime ){
-						bak_no = f_no;
-						break;
-					}
-					st_last = st_curr;
-					f_no++;
-
-					if( f_no>MAX_BACKUP_FILE ){
-						f_no = 1;
-					}
-				}
-			}
-
-			//sprintf(tmp, "cp %s %s.~%d~", EventLog, EventLog, bak_no++);
-			sprintf(tmp, "cp %s %s.~%d~", log_pathname, log_pathname, bak_no);
-			system(tmp);
-			sprintf(tmp, "rm -rf %s", log_pathname);
-			system(tmp);
-
-			//if( bak_no>MAX_BACKUP_FILE ){
-			//	bak_no = 1;
-			//}
-		}
-	}
-}
 
 int	ipv4_str_to_ip(char *str, ulong *ip)
 {

@@ -127,7 +127,6 @@ void redund_poll_nport_send(SERVINFO *servp);
 extern int		ttys, servers;
 extern TTYINFO 	ttys_info[MAX_TTYS];
 extern SERVINFO	serv_info[MAX_TTYS];
-extern char		EventLog[160];		/* Event log file name */
 extern int		maxfd;
 extern int      timeout_time;
 extern int		polling_time; 	    /* default disable polling function */
