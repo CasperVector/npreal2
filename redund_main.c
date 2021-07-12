@@ -24,7 +24,6 @@
 #include	<string.h>
 #include	<unistd.h>
 #include	<fcntl.h>
-#include	<signal.h>
 #include	<sys/ioctl.h>
 #include	<sys/sysinfo.h>
 #ifdef	STREAM
@@ -59,7 +58,6 @@ int     timeout_time = 0;
 int		polling_time=0; 	/* default disable polling function */
 int		polling_fd;
 int     polling_nport_fd[2];
-int		Restart_daemon;
 static	int	No_tty_defined;
 static	int enable_ipv6=1;  /*2 enable ipv6, 1 disenable ipv6*/
 #define EN_IPV6   2
@@ -70,17 +68,6 @@ extern	char	*ptsname();
 #ifdef	SSL_ON
 static void ssl_init(void);
 SSL_CTX *sslc_ctx;
-#endif
-
-#ifndef	STREAM
-void	restart_handle ();
-void	wait_handle ();
-void	connect_wait_handle ();
-#endif
-#ifdef	STREAM
-void	restart_handle (int);
-void	wait_handle (int);
-void	connect_wait_handle (int);
 #endif
 
 int poll_async_server_init();
@@ -97,7 +84,6 @@ char *	argv[];
 	TTYINFO *	infop;
 	char ver[100];
 	int		i;
-	Restart_daemon = 0;
 	No_tty_defined = 0;
 	polling_fd = -1; /* Add by Ying */
 
@@ -105,63 +91,6 @@ char *	argv[];
 		polling_nport_fd[i] = -1;
 	while (1)
 	{
-		if (Restart_daemon)
-		{
-			/* Add by Ying */
-			if (polling_fd >= 0)
-			{
-				close(polling_fd);
-				polling_fd = -1;
-			}
-			for(i=0; i<2; i++)
-			{
-				if (polling_nport_fd[i] >= 0)
-				{
-					close(polling_nport_fd[i]);
-					polling_nport_fd[i] = -1;
-				}
-			}
-			/* */
-
-			infop = ttys_info;
-			//            close (pipefd[0]);
-			//            close (pipefd[1]);
-			for (i = 0;i < ttys;i++)
-			{
-				infop->reconn_flag = 1;
-				if (infop->sock_fd >= 0)
-				{
-#ifdef SSL_ON
-					if (infop->ssl_enable)
-					{
-						SSL_shutdown(infop->pssl);
-						SSL_free(infop->pssl);
-						infop->pssl = NULL;
-					}
-#endif
-					close(infop->sock_fd);
-				}
-				if (infop->sock_cmd_fd >= 0)
-					close(infop->sock_cmd_fd);
-				if (infop->mpt_fd >= 0)
-					close(infop->mpt_fd);
-				infop++;
-				close(infop->pipe_port[0]);
-				close(infop->pipe_port[1]);
-			}
-		} /* if (Restart_daemon) */
-
-		if (Restart_daemon == 1)
-		{
-#ifndef	STREAM
-			signal (SIGTERM, ( (void (*)()) wait_handle) );
-#endif
-#ifdef	STREAM
-			signal (SIGTERM, wait_handle);
-#endif
-			pause();
-		} /* if (Restart_daemon == 1) */
-
 		/*
 		 * Read the poll time & the pesudo TTYs configuation file.
 		 */
@@ -192,8 +121,7 @@ char *	argv[];
 		/*
 		 * Initialize this Moxa TTYs daemon process.
 		 */
-		if (!Restart_daemon)
-			moxattyd_daemon_start();
+		moxattyd_daemon_start();
 
 		/*
 		 * Initialize polling async server function.
@@ -221,17 +149,8 @@ char *	argv[];
 			infop++;
 		}
 
-		signal(SIGCLD, SIG_IGN); /* Ignore signal if child process terminate. */
-
-		Restart_daemon = 0;
 		sprintf(ver, "MOXA Real TTY daemon program starting (%s %s)...", NPREAL_VERSION, NPREAL_BUILD);
 		log_event(ver);
-#ifndef	STREAM
-		signal (SIGTERM, ( (void (*)())restart_handle) );
-#endif
-#ifdef	STREAM
-		signal (SIGTERM, restart_handle);
-#endif
 
 		/*
 		 * Handle Moxa TTYs data communication.
@@ -722,8 +641,7 @@ char *	cmdpath;
 		infop->server_type = server_type;
 		infop->disable_fifo = disable_fifo;
 		infop->tcp_wait_id = 0;
-		if (!Restart_daemon)
-			infop->tty_used_timestamp = 0;
+		infop->tty_used_timestamp = 0;
 		infop->first_servertime = 0;
 #ifdef	SSL_ON
 		infop->pssl = NULL;
@@ -761,19 +679,6 @@ void moxattyd_daemon_start()
         goto next;
 
     /*
-     * Ignore the terminal stop signals.
-     */
-#ifdef	SIGTTOU
-    signal(SIGTTOU, SIG_IGN);
-#endif
-#ifdef	SIGTTIN
-    signal(SIGTTIN, SIG_IGN);
-#endif
-#ifdef	SIGTSTP
-    signal(SIGTSTP, SIG_IGN);
-#endif
-
-    /*
      * If we were not started in the background, fork and let the parent
      * exit. This also guarantees the first child is not a process group
      * leader.
@@ -805,7 +710,6 @@ void moxattyd_daemon_start()
         log_event("Can't change process group !");
         exit(0);
     }
-    signal(SIGHUP, SIG_IGN);	/* immune from pgrp leader death */
     if ( (childpid = fork()) < 0 )
     {
         log_event("Can't fork second child !");
@@ -969,60 +873,7 @@ int poll_async_server_init()
 void log_event(msg)
 char *	msg;
 {
-    if (Restart_daemon)
-        return;
-
     _log_event_backup(EventLog, msg);
-}
-
-#ifndef	STREAM
-void	restart_handle ()
-#endif
-#ifdef	STREAM
-void	restart_handle (int sig)
-#endif
-{
-    Restart_daemon = 1;
-#ifndef	STREAM
-    signal (SIGTERM, ( (void (*)()) wait_handle) );
-#endif
-#ifdef	STREAM
-    sig = sig;
-    signal (SIGTERM, wait_handle);
-#endif
-}
-
-#ifndef	STREAM
-void	wait_handle ()
-#endif
-#ifdef	STREAM
-void	wait_handle (int sig)
-#endif
-{
-    Restart_daemon = 2;
-#ifndef	STREAM
-    signal (SIGTERM, ( (void (*)()) wait_handle) );
-#endif
-#ifdef	STREAM
-    sig = sig;
-    signal (SIGTERM, wait_handle);
-#endif
-}
-
-#ifndef	STREAM
-void	connect_wait_handle ()
-#endif
-#ifdef	STREAM
-void	connect_wait_handle (int sig)
-#endif
-{
-#ifndef	STREAM
-    signal (SIGUSR1, ( (void (*)()) connect_wait_handle) );
-#endif
-#ifdef	STREAM
-    sig = sig;
-    signal (SIGUSR1, connect_wait_handle);
-#endif
 }
 
 #ifdef	SSL_ON

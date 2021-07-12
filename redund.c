@@ -133,7 +133,6 @@ extern int      timeout_time;
 extern int		polling_time; 	    /* default disable polling function */
 extern int		polling_fd;
 extern int      polling_nport_fd[2];
-extern int		Restart_daemon;
 static int	    No_tty_defined;
 static int      enable_ipv6 = 1;    /* 2 enable ipv6, 1 disenable ipv6 */
 
@@ -158,22 +157,6 @@ void redund_handle_ttys() /* child process ok */
 
 	while (1)
 	{
-		if (Restart_daemon == 1)
-		{
-			for ( i=0, infop=&ttys_info[0]; i<ttys; i+=1, infop+=1 )
-			{
-				if (!infop->redundant_mode)
-					continue;
-				if (infop->tty_used_timestamp)
-				{
-					ioctl(infop->mpt_fd,
-							_IOC(_IOC_READ|_IOC_WRITE,'m',CMD_DISCONNECTED,0),
-							0);
-				}
-				infop->reconn_flag = 1;
-			}
-			return;
-		}
 		tm.tv_sec = 3;
 		tm.tv_usec = 0;
 		FD_ZERO(&rfd);

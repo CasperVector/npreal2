@@ -59,7 +59,6 @@ int     timeout_time = 0;
 int		polling_time=0; 	/* default disable polling function */
 int		polling_fd;				/* This is a socket handler for polling Async Server periodically. */
 int     polling_nport_fd[2];    /* [0] is for IPv4 whereas [1] is for IPv6. They are sockets handlers for polling NPort net status(DSCI, UDP). */
-int		Restart_daemon;
 static	int	No_tty_defined;
 static	int enable_ipv6=2;  /*2 enable ipv6, 1 disenable ipv6*/
 #define EN_IPV6   2
@@ -74,20 +73,6 @@ SSL_CTX *sslc_ctx;
 
 int	g_tcp_wait_id = 0;
 //static char mm[128];
-
-#ifndef	STREAM
-void	restart_handle ();
-void	wait_handle ();
-void	connect_wait_handle ();
-void    config_changed_handle ();
-#endif
-#ifdef	STREAM
-void	restart_handle (int);
-void	wait_handle (int);
-void	connect_wait_handle (int);
-void    config_changed_handle (int);
-#endif
-int     Gconfig_changed;
 char    Gcffile[160];
 
 int poll_async_server_init();
@@ -119,7 +104,6 @@ char *	argv[];
 	char ver[100];
 	int		i;
 
-	Restart_daemon = 0;
 	No_tty_defined = 0;
 	polling_fd = -1; /* Add by Ying */
 
@@ -129,61 +113,6 @@ char *	argv[];
 	// Main loop
 	while (1)
 	{
-		if (Restart_daemon)
-		{
-			/* Add by Ying */
-			if (polling_fd >= 0)
-			{
-				close(polling_fd);
-				polling_fd = -1;
-			}
-			for(i=0; i<2; i++)
-			{
-				if (polling_nport_fd[i] >= 0)
-				{
-					close(polling_nport_fd[i]);
-					polling_nport_fd[i] = -1;
-				}
-			}
-			/* */
-
-			infop = ttys_info;
-			close (pipefd[0]);
-			close (pipefd[1]);
-			for (i = 0;i < ttys;i++)
-			{
-				infop->reconn_flag = 1;
-				if (infop->sock_fd >= 0)
-				{
-#ifdef SSL_ON
-					if (infop->ssl_enable)
-					{
-						SSL_shutdown(infop->pssl);
-						SSL_free(infop->pssl);
-						infop->pssl = NULL;
-					}
-#endif
-					close(infop->sock_fd);
-				}
-				if (infop->sock_cmd_fd >= 0)
-					close(infop->sock_cmd_fd);
-				if (infop->mpt_fd >= 0)
-					close(infop->mpt_fd);
-				infop++;
-			}
-		} /* if (Restart_daemon) */
-
-		if (Restart_daemon == 1)
-		{
-#ifndef	STREAM
-			signal (SIGTERM, ( (void (*)()) wait_handle) );
-#endif
-#ifdef	STREAM
-			signal (SIGTERM, wait_handle);
-#endif
-			pause();
-		}
-
 		/*
 		 * Read the poll time & the pesudo TTYs configuation file.
 		 */
@@ -217,12 +146,7 @@ char *	argv[];
 		/*
 		 * Initialize this Moxa TTYs daemon process.
 		 */
-		if (!Restart_daemon && !Gconfig_changed)
-			moxattyd_daemon_start();
-
-		if( Gconfig_changed ){
-			Gconfig_changed = 0;
-		}
+		moxattyd_daemon_start();
 
 		/*
 		 * Initialize polling NPort and Async Server function.
@@ -243,17 +167,9 @@ char *	argv[];
 #ifdef	O_NDELAY
 		fcntl(pipefd[0], F_SETFL, fcntl(pipefd[0], F_GETFL) | O_NDELAY);
 #endif
-		signal(SIGCLD, SIG_IGN);
 
-		Restart_daemon = 0;
 		sprintf(ver, "MOXA Real TTY daemon program starting (%s %s)...", NPREAL_VERSION, NPREAL_BUILD);
 		log_event(ver);
-#ifndef	STREAM
-		signal (SIGTERM, ( (void (*)())restart_handle) );
-#endif
-#ifdef	STREAM
-		signal (SIGTERM, restart_handle);
-#endif
 
 		/*
 		 * Handle Moxa TTYs data communication.
@@ -261,13 +177,6 @@ char *	argv[];
 #ifdef SSL_ON
 		ssl_init();
 #endif
-#ifndef STREAM
-		signal (SIGUSR1, ( (void (*)()) config_changed_handle) );
-#endif
-#ifdef  STREAM
-		signal (SIGUSR1, config_changed_handle);
-#endif
-		Gconfig_changed = 0;
 		if (Graw_mode)
 			moxattyd_handle_ttys(); /* child process ok */
 		else
@@ -790,8 +699,7 @@ char *	cmdpath;
 		infop->server_type = server_type;
 		infop->disable_fifo = disable_fifo;
 		infop->tcp_wait_id = g_tcp_wait_id;
-		if (!Restart_daemon)
-			infop->tty_used_timestamp = 0;
+		infop->tty_used_timestamp = 0;
 		infop->first_servertime = 0;
 #ifdef	SSL_ON
 		infop->pssl = NULL;
@@ -829,19 +737,6 @@ void moxattyd_daemon_start()
 		goto next;
 
 	/*
-	 * Ignore the terminal stop signals.
-	 */
-#ifdef	SIGTTOU
-	signal(SIGTTOU, SIG_IGN);
-#endif
-#ifdef	SIGTTIN
-	signal(SIGTTIN, SIG_IGN);
-#endif
-#ifdef	SIGTSTP
-	signal(SIGTSTP, SIG_IGN);
-#endif
-
-	/*
 	 * If we were not started in the background, fork and let the parent
 	 * exit. This also guarantees the first child is not a process group
 	 * leader.
@@ -873,7 +768,6 @@ void moxattyd_daemon_start()
 		log_event("Can't change process group !");
 		exit(0);
 	}
-	signal(SIGHUP, SIG_IGN);	/* immune from pgrp leader death */
 	if ( (childpid = fork()) < 0 )
 	{
 		log_event("Can't fork second child !");
@@ -1585,226 +1479,6 @@ int af_type;
  *	maintain the TCP/IP connection to Async-Server and exchange those
  *	data to/from TCP sockets and master pseudo tty file descriptors.
  */
-int moxattyd_change_config() {
-	int			data, cmd;
-	int         i, j, n, chttys;
-	FILE *      ConfigFd;
-	TTYINFO     *infop, *orip;
-	char        buf[160], showbuf[80];
-	char		ttyname[160], tcpport[16], cmdport[16];
-	char		ttyname2[160], curname[160], scope_id[10];
-	TTYINFO     chttys_info[MAX_TTYS];
-	int32_t		server_type, disable_fifo;
-	int32_t		temp;
-	char		tmp_cmd[1024];
-#ifdef SSL_ON
-	int32_t		ssl_enable;
-#endif
-
-	printf("start moxaddyd_change_config ttys = %d\n", ttys);
-	printf("Gcffile = %s\n", Gcffile);
-	ConfigFd = fopen(Gcffile, "r");
-	if ( ConfigFd == NULL ) {
-		sprintf(showbuf,"Can't open configuration file (moxattyd.cf) !");
-		log_event(showbuf);
-		printf("change_config : open fial\n");
-		return(-1);
-	}
-
-	// Read npreal2d.cf to chttys_info.
-	chttys = 0;
-	infop = chttys_info;
-	while ( chttys < MAX_TTYS ) {
-		if ( fgets(buf, sizeof(buf), ConfigFd) == NULL )
-			break;
-		//memset(&infop->redund, 0, sizeof(struct redund_struct));
-		server_type = disable_fifo = 0;
-#ifdef SSL_ON
-		ssl_enable = 0;
-#endif
-		n = sscanf(buf, "%s%s%s%s%d%d%s%s%s%d",
-				ttyname,
-				infop->ip_addr_s,
-				tcpport,
-				cmdport,
-				&disable_fifo,
-#ifdef SSL_ON
-				&ssl_enable,
-#else
-				&temp,
-#endif
-				ttyname2,
-				curname,
-				scope_id,
-				&infop->redundant_mode);
-		printf("\n");
-		if(n != 9 && n != 10)
-		{
-			continue;
-		}
-
-		if (ttyname[0] == '#') {
-			continue;
-		}
-
-		if (disable_fifo == 1) {
-			disable_fifo = 0;
-		} else {
-			disable_fifo = 1;
-		}
-
-		resolve_dns_host_name(infop);
-
-		if ( (data = atoi(tcpport)) <= 0 || data >= 10000 )
-			continue;
-
-		if ( (cmd = atoi(cmdport)) <= 0 || cmd >= 10000 )
-			continue;
-
-		if((strncmp(infop->ip_addr_s, "fe80", 4) == 0) || (strncmp(infop->ip_addr_s, "FE80", 4) == 0))
-		{
-			if(strlen(scope_id) == 0)
-			{
-				break;
-			}
-			strcpy(infop->scope_id, scope_id);
-		}
-		else
-		{
-			memset(infop->scope_id, 0, 10);
-		}
-
-		printf("\n");
-
-		sprintf(infop->mpt_name, "/proc/npreal2/%s", ttyname);
-		infop->tcp_port = data;
-
-		infop->cmd_port = cmd;
-		infop->mpt_fd = -1;
-		infop->sock_fd = -1;
-		infop->sock_cmd_fd = -1;
-		infop->state = STATE_INIT;
-		infop->mpt_bufptr = (char *)malloc (BUFFER_SIZE * 2);
-		if (infop->mpt_bufptr == (char *)NULL) {
-			log_event("Alocate memory fail !");
-
-			break;
-		}
-		infop->sock_bufptr = infop->mpt_bufptr + BUFFER_SIZE;
-		infop->mpt_datakeep = 0;
-		infop->mpt_dataofs = 0;
-		infop->mpt_cmdkeep = 0;
-		infop->sock_datakeep = 0;
-		infop->sock_dataofs = 0;
-		infop->sock_cmdkeep = 0;
-		infop->error_flags = 0;
-		infop->server_type = server_type;
-		infop->disable_fifo = disable_fifo;
-		infop->tcp_wait_id = g_tcp_wait_id;
-		strcpy(infop->ttyname, ttyname);
-		strcpy(infop->ttyname2, ttyname2);
-		strcpy(infop->curname, curname);
-		printf("ip = %s\n", infop->ip_addr_s);
-		printf("name = %s\n", infop->ttyname);
-		printf("name2 = %s\n", infop->ttyname2);
-		printf("\n");
-		if (!Restart_daemon)
-			infop->tty_used_timestamp = 0;
-		infop->first_servertime = 0;
-#ifdef  SSL_ON
-		infop->pssl = NULL;
-		infop->ssl_enable = ssl_enable;
-#endif
-		infop++;
-		chttys++;
-	}
-
-	fclose(ConfigFd);
-
-	// If npreal2d.cf contains running ttys, copy parameters from original ttys.
-	orip = ttys_info;
-	for (i = 0; i < ttys; i++, orip++) {
-		infop = chttys_info;
-		for (j = 0; j < chttys; j++, infop++) {
-			if (strcmp(orip->mpt_name, infop->mpt_name) == 0) {
-				if (strcmp(orip->ip_addr_s, infop->ip_addr_s) == 0) {
-					if (orip->tcp_port == infop->tcp_port) {
-						orip->static_param = 1; /* Don't reset the ttys_info[i] until all servers are initialized. */
-						memcpy(&chttys_info[j], &ttys_info[i], sizeof(TTYINFO));
-						break;
-					}
-				}
-			}
-		}
-	}
-	orip = ttys_info;
-#if 1
-
-	// Close all ttys are not exist in npreal2d.cf
-	for (i = 0; i < ttys; i++, orip++) {
-		if (orip->static_param != 1) { /* new_info != old_info */
-			//sprintf(mm, "logger \"CFD>(%d, %s) closed tty %s \"", __LINE__, __FUNCTION__, orip->ttyname);
-			//system(mm);
-
-			close(orip->mpt_fd);
-			close(orip->sock_fd);
-			close(orip->sock_cmd_fd);
-
-			//sprintf(mm, "logger \"CFD>(%d, %s) Deleting ttyname2=%s\"", __LINE__, __FUNCTION__, orip->ttyname2);
-			//system(mm);
-
-			sprintf(tmp_cmd, "rm -rf /dev/%s", orip->ttyname2);
-			system(tmp_cmd);
-
-			sprintf(tmp_cmd, "rm -rf /dev/%s", orip->curname);
-			system(tmp_cmd);
-		}
-	}
-#endif
-
-	// Copy all ttys in npreal2d.cf to current structures
-	//printf("start\n");
-	for (i = 0; i < chttys; i++) {
-		memcpy(&ttys_info[i], &chttys_info[i], sizeof(TTYINFO));
-		//printf("ip = %s\n", chttys_info[i].ip_addr_s);
-		//printf("name = %s\n", chttys_info[i].ttyname);
-		//printf("name2 = %s\n", chttys_info[i].ttyname2);
-		//sprintf(mm, "logger \"CFD>(%d, %s) Available ip=%s\"", __LINE__, __FUNCTION__, chttys_info[i].ip_addr_s);
-		//system(mm);
-		//sprintf(mm, "logger \"CFD>(%d, %s) Available name=%s\"", __LINE__, __FUNCTION__, chttys_info[i].ttyname);
-		//system(mm);
-		//sprintf(mm, "logger \"CFD>(%d, %s) Available name2=%s\"", __LINE__, __FUNCTION__, chttys_info[i].ttyname2);
-		//system(mm);
-	}
-	//printf("end\n");
-
-	// Rebuild all device nodes
-	for (i = 0; i < chttys; i++) {
-
-		if( ttys_info[i].static_param )
-			continue;
-
-		//sprintf(mm, "logger \"CFD>(%d, %s) Create node for ttyname2=%s\"", __LINE__, __FUNCTION__, ttys_info[i].ttyname2);
-		//system(mm);
-
-		sprintf(tmp_cmd, "/usr/lib/npreal2/driver/mxmknod %s 33 %s",
-				ttys_info[i].ttyname2, ttys_info[i].ttyname);
-		//		sprintf(tmp_cmd, "mknod -Z system_u:object_r:tty_device_t:s0 -m 666 /dev/%s c 33 %s",
-		//						 &ttys_info[i].ttyname2, &ttys_info[i].ttyname);
-		system(tmp_cmd);
-
-		sprintf(tmp_cmd, "/usr/lib/npreal2/driver/mxmknod %s 38 %s",
-				ttys_info[i].curname, ttys_info[i].ttyname);
-		//		sprintf(tmp_cmd, "mknod -Z system_u:object_r:tty_device_t:s0 -m 666 /dev/%s c 33 %s",
-		//						 &ttys_info[i].curname, &ttys_info[i].ttyname);
-		system(tmp_cmd);
-	}
-
-	ttys = chttys;
-	return(chttys);
-}
-
-
 void moxattyd_handle_ttys()
 {
 	int		i, n, m, maxfd, t0, sndx,len,len1,j;
@@ -1821,29 +1495,6 @@ void moxattyd_handle_ttys()
 
 	while ( 1 )
 	{
-		//printf("---------------------------------\n");
-		if (Restart_daemon)
-		{
-			for ( i=0, infop=ttys_info; i<ttys; i+=1, infop+=1 )
-			{
-				if (infop->redundant_mode)
-					continue;
-				if (infop->tty_used_timestamp)
-				{
-					ioctl(infop->mpt_fd,
-							_IOC(_IOC_READ|_IOC_WRITE,'m',CMD_DISCONNECTED,0),
-							0);
-				}
-				infop->reconn_flag = 1;
-			}
-			return;
-		}
-		if (Gconfig_changed > 0) {
-			//sprintf(mm, "logger \"CFD> %d, %s\"", __LINE__, __FUNCTION__);
-			//system(mm);
-			break;
-		}
-
 		tm.tv_sec = 3;
 		tm.tv_usec = 0;
 		FD_ZERO(&rfd);
@@ -1854,7 +1505,7 @@ void moxattyd_handle_ttys()
 		tcp_wait_count = 0;
 		for ( i=0, infop=ttys_info; i<ttys; i+=1, infop+=1 )
 		{
-			if( !Gconfig_changed && infop->static_param ){
+			if(infop->static_param ){
 				//sprintf(mm, "logger \"CFD>(%d, %s) static_param cleared(%s).\"", __LINE__, __FUNCTION__, infop->mpt_name);
 				//system(mm);
 				infop->static_param = 0;
@@ -2034,11 +1685,6 @@ void moxattyd_handle_ttys()
 		{
 			if (infop->redundant_mode)
 				continue;
-			if (Gconfig_changed > 0){
-				//sprintf(mm, "logger \"CFD> %d, %s\"", __LINE__, __FUNCTION__);
-				//system(mm);
-				break;
-			}
 			if ( infop->mpt_fd < 0)
 				continue;
 			if ( (infop->mpt_fd)&&FD_ISSET(infop->mpt_fd, &efd) )
@@ -2998,60 +2644,7 @@ void ConnectCheck()
 void log_event(msg)
 char *	msg;
 {
-    if (Restart_daemon)
-        return;
-
     _log_event_backup(EventLog, msg);
-}
-
-#ifndef	STREAM
-void	restart_handle ()
-#endif
-#ifdef	STREAM
-void	restart_handle (int sig)
-#endif
-{
-	Restart_daemon = 1;
-#ifndef	STREAM
-	signal (SIGTERM, ( (void (*)()) wait_handle) );
-#endif
-#ifdef	STREAM
-	sig = sig;
-	signal (SIGTERM, wait_handle);
-#endif
-}
-
-#ifndef	STREAM
-void	wait_handle ()
-#endif
-#ifdef	STREAM
-void	wait_handle (int sig)
-#endif
-{
-	Restart_daemon = 2;
-#ifndef	STREAM
-	signal (SIGTERM, ( (void (*)()) wait_handle) );
-#endif
-#ifdef	STREAM
-	sig = sig;
-	signal (SIGTERM, wait_handle);
-#endif
-}
-
-#ifndef	STREAM
-void	connect_wait_handle ()
-#endif
-#ifdef	STREAM
-void	connect_wait_handle (int sig)
-#endif
-{
-#ifndef	STREAM
-	signal (SIGUSR1, ( (void (*)()) connect_wait_handle) );
-#endif
-#ifdef	STREAM
-	sig = sig;
-	signal (SIGUSR1, connect_wait_handle);
-#endif
 }
 
 #ifdef	SSL_ON
@@ -3081,27 +2674,6 @@ static void ssl_init(void)
 	SSL_CTX_set_mode(sslc_ctx, SSL_MODE_AUTO_RETRY);
 }
 #endif
-#ifndef STREAM
-void    config_changed_handle ()
-#endif
-#ifdef  STREAM
-void    config_changed_handle (int sig)
-#endif
-{
-	//sprintf(mm, "logger \"CFD> %d, %s\"", __LINE__, __FUNCTION__);
-	//system(mm);
-	moxattyd_change_config();
-	//sprintf(mm, "logger \"CFD> %d, %s\"", __LINE__, __FUNCTION__);
-	//system(mm);
-	Gconfig_changed = 1;
-#ifndef STREAM
-	signal (SIGUSR1, ( (void (*)()) config_changed_handle) );
-#endif
-#ifdef  STREAM
-	sig = sig;
-	signal (SIGUSR1, config_changed_handle);
-#endif
-}
 
 void _log_event_backup(char *log_pathname, char *msg)
 {
