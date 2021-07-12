@@ -58,7 +58,6 @@ int     timeout_time = 0;
 int		polling_time=0; 	/* default disable polling function */
 int		polling_fd;
 int     polling_nport_fd[2];
-static	int	No_tty_defined;
 static	int enable_ipv6=1;  /*2 enable ipv6, 1 disenable ipv6*/
 #define EN_IPV6   2
 #define DIS_IPV6  1
@@ -77,87 +76,81 @@ int	moxattyd_read_config(char *cmdpath);
 /*
  *	MOXA TTY daemon main program
  */
-void main(argc, argv)
+int main(argc, argv)
 int	argc;
 char *	argv[];
 {
 	TTYINFO *	infop;
 	char ver[100];
 	int		i;
-	No_tty_defined = 0;
 	polling_fd = -1; /* Add by Ying */
 
 	for(i=0; i<2; i++)
 		polling_nport_fd[i] = -1;
+
+	/*
+	 * Read the poll time & the pesudo TTYs configuation file.
+	 */
+
+	if ( (argc > 2) && (strcmp(argv[1], "-t") == 0) )
+	{
+		// The unit of -t is minute.
+		timeout_time = 60 * atoi(argv[2]);
+		polling_time = timeout_time;
+		if ( polling_time >= 60 )
+		{
+			polling_time = (polling_time - 20) / 4;
+		}
+	}
+
+	if ( moxattyd_read_config(argv[0]) <= 0 )
+	{
+		fprintf (stderr, "Not any tty defined\n");
+		return 1;
+		//			usleep(1000);
+		//			continue;
+	}
+
+	/*
+	 * Initialize this Moxa TTYs daemon process.
+	 */
+	moxattyd_daemon_start();
+
+	/*
+	 * Initialize polling async server function.
+	 */
+	while ( polling_time && (poll_async_server_init() < 0) ) { }
+
+	/*
+	 * Open PIPE, set read to O_NDELAY mode.
+	 */
+	//
+
+	infop = ttys_info;
+	for (i = 0;i < ttys;i++) {
+		if ( pipe(infop->pipe_port) < 0 )
+		{
+			log_event("pipe error !");
+			return -1;
+		}
+#ifdef	O_NDELAY
+		fcntl(infop->pipe_port[0], F_SETFL, fcntl(infop->pipe_port[0], F_GETFL) | O_NDELAY);
+#endif
+		infop++;
+	}
+
+	sprintf(ver, "MOXA Real TTY daemon program starting (%s %s)...", NPREAL_VERSION, NPREAL_BUILD);
+	log_event(ver);
+
+	/*
+	 * Handle Moxa TTYs data communication.
+	 */
+#ifdef SSL_ON
+	ssl_init();
+#endif
+
 	while (1)
 	{
-		/*
-		 * Read the poll time & the pesudo TTYs configuation file.
-		 */
-
-		if ( (argc > 2) && (strcmp(argv[1], "-t") == 0) )
-		{
-			// The unit of -t is minute.
-			timeout_time = 60 * atoi(argv[2]);
-			polling_time = timeout_time;
-			if ( polling_time >= 60 )
-			{
-				polling_time = (polling_time - 20) / 4;
-			}
-		}
-
-		if ( moxattyd_read_config(argv[0]) <= 0 )
-		{
-			if (!No_tty_defined)
-			{
-				log_event ("Not any tty defined");
-				No_tty_defined = 1;
-			}
-			break;
-			//			usleep(1000);
-			//			continue;
-		}
-		No_tty_defined = 0;
-		/*
-		 * Initialize this Moxa TTYs daemon process.
-		 */
-		moxattyd_daemon_start();
-
-		/*
-		 * Initialize polling async server function.
-		 */
-		if ( polling_time && (poll_async_server_init() < 0) )
-		{
-			continue;
-		}
-
-		/*
-		 * Open PIPE, set read to O_NDELAY mode.
-		 */
-		//
-
-		infop = ttys_info;
-		for (i = 0;i < ttys;i++) {
-			if ( pipe(infop->pipe_port) < 0 )
-			{
-				log_event("pipe error !");
-				continue;
-			}
-#ifdef	O_NDELAY
-			fcntl(infop->pipe_port[0], F_SETFL, fcntl(infop->pipe_port[0], F_GETFL) | O_NDELAY);
-#endif
-			infop++;
-		}
-
-		sprintf(ver, "MOXA Real TTY daemon program starting (%s %s)...", NPREAL_VERSION, NPREAL_BUILD);
-		log_event(ver);
-
-		/*
-		 * Handle Moxa TTYs data communication.
-		 */
-#ifdef SSL_ON
-		ssl_init();
-#endif
 		if (Gredund_mode)
 			redund_handle_ttys(); /* child process ok */
 	}
