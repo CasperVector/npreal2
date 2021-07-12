@@ -48,6 +48,7 @@ int ipv6_str_to_ip(char *str, unsigned char *ip);
 /* The mode which daemon will be waken up */
 int		Graw_mode = 0;
 int		Gredund_mode = 0;
+int		Gfglog_mode = 0;
 
 int		ttys, servers;
 TTYINFO 	ttys_info[MAX_TTYS];
@@ -71,10 +72,9 @@ SSL_CTX *sslc_ctx;
 
 int	g_tcp_wait_id = 0;
 //static char mm[128];
-char    Gcffile[160];
 
 int poll_async_server_init();
-int	moxattyd_read_config(char *cmdpath);
+int	moxattyd_read_config(char *cfgpath);
 void ConnectCheck();
 void CloseTcp(TTYINFO *infop);
 void ConnectTcp(TTYINFO *infop);
@@ -99,6 +99,7 @@ char *	argv[];
 {
 	TTYINFO *	infop;
 	char ver[100];
+	char *cfgpath = "/usr/lib/npreal2/driver/npreal2d.cf";
 	int		i;
 
 	polling_fd = -1; /* Add by Ying */
@@ -109,18 +110,21 @@ char *	argv[];
 	/*
 	 * Read the poll time & the pesudo TTYs configuation file.
 	 */
-
-	if ( (argc > 2) && (strcmp(argv[1], "-t") == 0) )
-	{
-		timeout_time = 60 * atoi(argv[2]);
-		polling_time = timeout_time;
-		if ( polling_time >= 60 )
-		{
-			polling_time = (polling_time - 20) / 4;
-		}
+	for (i = 1; i < argc; ++i) {
+		if (!strcmp(argv[i], "-t")) {
+			if ((++i) >= argc) { fprintf (stderr, "Usage error\n"); return 1; }
+			timeout_time = 60 * atoi(argv[i]);
+			polling_time = timeout_time;
+			if (polling_time >= 60) polling_time = (polling_time - 20) / 4;
+		} else if (!strcmp(argv[i], "-c")) {
+			if ((++i) >= argc) { fprintf (stderr, "Usage error\n"); return 1; }
+			cfgpath = argv[i];
+		} else if (!strcmp(argv[i], "-f")) {
+			Gfglog_mode = 1;
+		} else { fprintf (stderr, "Usage error\n"); return 1; }
 	}
 
-	if ( moxattyd_read_config(argv[0]) <= 0 )
+	if (moxattyd_read_config(cfgpath) <= 0)
 	{
 		//sprintf(mm, "logger \"CFD>(%d, %s) Read CFG Error.\"", __LINE__, __FUNCTION__);
 		//system(mm);
@@ -134,10 +138,12 @@ char *	argv[];
 	/*
 	 * Initialize this Moxa TTYs daemon process.
 	 */
-	openlog ("npreal2d", LOG_PID, LOG_DAEMON);
-	if (daemon (0, 0)) {
-		log_event ("Failed to daemonize");
-		return -1;
+	if (!Gfglog_mode) {
+		openlog ("npreal2d", LOG_PID, LOG_DAEMON);
+		if (daemon (0, 0)) {
+			log_event ("Failed to daemonize");
+			return -1;
+		}
 	}
 
 	/*
@@ -455,14 +461,14 @@ TTYINFO *infop;
  *	Prepare LOG file and read the config TTY records.
  *
  */
-int	moxattyd_read_config(cmdpath)
-char *	cmdpath;
+int	moxattyd_read_config(cfgpath)
+char *	cfgpath;
 {
 	int		n, data, cmd;
 	FILE *		ConfigFd;
 	struct hostent *host;
 	TTYINFO *	infop;
-	char		workpath[128], buf[160];
+	char		buf[160];
 	char		ttyname[160],tcpport[16],cmdport[16];
 	char		ttyname2[160], curname[160], scope_id[10];
 	int			redundant_mode;
@@ -477,16 +483,11 @@ char *	cmdpath;
 	char		redund_ip[40];
 
 	redundant_mode = 0;
-	// Scott: 2005-10-03
-	// The original design will lead to an incorrect workpath.
-	// Use fixed path instead.
-	sprintf(workpath, "/usr/lib/npreal2/driver");
 
 	/*
 	 * Prepare the full-path file names of LOG/Configuration.
 	 */
-	sprintf(buf,"%s/npreal2d.cf", workpath);        /* Config file name */
-	strcpy(Gcffile, buf);
+	sprintf(buf, cfgpath);        /* Config file name */
 
 	/*
 	 * Open configuration file:
@@ -2553,7 +2554,8 @@ void ConnectCheck()
 void log_event(msg)
 char *	msg;
 {
-	syslog (LOG_INFO, "%s", msg);
+	if (Gfglog_mode) fprintf (stderr, "%s\n", msg);
+	else syslog (LOG_INFO, "%s", msg);
 }
 
 #ifdef	SSL_ON
