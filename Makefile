@@ -15,8 +15,8 @@ LIBS += -lssl
 endif
 
 all: $(OBJS)
-npreal2d: npreal2d.o $(LIBS)
-redund: redund_main.o redund.o -lpthread $(LIBS)
+npreal2d: npreal2d.o common.o $(LIBS)
+redund: redund_main.o redund.o common.o -lpthread $(LIBS)
 
 async_flags.h:
 	if ! grep -E $(ASYNC_PATT) < $(KERNEL)/include/uapi/linux/tty_flags.h \

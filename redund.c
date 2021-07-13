@@ -48,9 +48,6 @@ int Gkeep_idle = 1;   			/* idle time (sec)*/
 int Gkeep_interval = 3;			/* interval time (sec) */
 int Gkeep_count = 2;			/* try how many time */
 pthread_mutex_t Gmutex = PTHREAD_MUTEX_INITIALIZER;
-#ifdef	SSL_ON
-extern SSL_CTX *sslc_ctx;
-#endif
 
 int connect_nonb(int fd, struct sockaddr_in *sockaddr, socklen_t socklen, int usec);
 
@@ -124,19 +121,10 @@ void redund_poll_nport_send(SERVINFO *servp);
 #define		IS_IPV4		0
 #define		IS_IPV6		1
 
-extern int		ttys, servers;
-extern TTYINFO 	ttys_info[MAX_TTYS];
-extern SERVINFO	serv_info[MAX_TTYS];
 extern int		maxfd;
 extern int      timeout_time;
 extern int		polling_time; 	    /* default disable polling function */
-extern int		polling_fd;
-extern int      polling_nport_fd[2];
 static int	    No_tty_defined;
-static int      enable_ipv6 = 1;    /* 2 enable ipv6, 1 disenable ipv6 */
-
-#define EN_IPV6   2
-#define DIS_IPV6  1
 
 void redund_handle_ttys() /* child process ok */
 {

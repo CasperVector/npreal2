@@ -3,6 +3,9 @@
 #define _NPREAL2D_H
 
 #include    "redund.h"
+#ifdef SSL_ON
+#include <openssl/ssl.h>
+#endif
 
 #undef      FD_SETSIZE
 #define     FD_SETSIZE      1024
@@ -298,6 +301,24 @@ union sock_addr
 #define POLLING_ALIVE_TIME	30
 #endif
 
-void log_event(char *msg);
+#define EN_IPV6   2
+#define DIS_IPV6  1
 
+extern int Gfglog_mode;
+extern int enable_ipv6;
+extern int ttys, servers;
+extern int polling_fd; /* This is a socket handler for polling Async Server periodically. */
+extern int polling_nport_fd[2];  /* [0] is for IPv4 whereas [1] is for IPv6. They are sockets handlers for polling NPort net status(DSCI, UDP). */
+extern TTYINFO ttys_info[MAX_TTYS];
+extern SERVINFO serv_info[MAX_TTYS];
+
+void log_event(char *msg);
+int ipv4_str_to_ip(char *str, ulong *ip);
+int ipv6_str_to_ip(char *str, unsigned char *ip);
+int poll_async_server_init();
+
+#ifdef	SSL_ON
+extern SSL_CTX *sslc_ctx;
+void ssl_init(void);
+#endif
 #endif /* _NPREAL2D_H */
