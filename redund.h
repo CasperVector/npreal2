@@ -2,8 +2,6 @@
 #ifndef _REDUND_H
 #define _REDUND_H
 
-
-
 #define IPADDR2 1
 #define BUF_SIZE 2048
 #define REDUND_SIZE 1024 
@@ -77,59 +75,5 @@ struct redund_struct
 	int host_ack;
 	int8_t session;
 };
-#if 0
-int pack_redundant(int fd, char *buf, ssize_t len);
-int pack_data_redundant(int fd, char *buf, ssize_t len, uint16_t seq);
-int unpack_redundant(char *buf, ssize_t len);
-
-int redund_add_hdr_1(int fd, char *sbuf, char **dbuf, ssize_t len, struct expect_struct *expect);
-
-int redund_send(int fd, const char *sbuf, ssize_t len, struct expect_struct *expect);
-int redund_send_data(int fd, const char *sbuf, ssize_t len, struct expect_struct *expect);
-int redund_send_cmd(int fd, const char *sbuf, ssize_t len, struct expect_struct *expect);
-int redund_add_hdr(int fd, const char *sbuf, char *dbuf, ssize_t len, struct expect_struct *expect);
-int redund_add_hdr_data(int fd, const char *sbuf, char *dbuf, ssize_t len, struct expect_struct *expect);
-int redund_send_check(int fd, char *buf, struct expect_struct *expect);
-
-int redund_recv(int fd, char *sbuf, ssize_t len, struct expect_struct *expect);
-int redund_recv_data(int fd, char *sbuf, ssize_t len, struct expect_struct *expect, int datakeep, int dataofs);
-int redund_recv_cmd(int fd, char *sbuf, ssize_t len, struct expect_struct *expect);
-int redund_de_hdr(int fd, const char *sbuf, char *dbuf, ssize_t len, struct expect_struct *expect);
-int redund_recv_check(int fd, char *buf, struct expect_struct *expect);
-
-int redund_data_init(int fd, struct expect_struct *expect);
-int redund_cmd_init(int fd, struct expect_struct *expect);
-int data_port_init2(int fd);
-int cmd_port_init(int fd);
-
-int cmd_port_check_alive(int fd);
-int send_cmd_port_ls(int fd);
-#endif
-#define			RET_OK				1
-#define         REDUND_INIT       	0
-#define         REDUND_MPT_OPEN   	1
-#define         REDUND_CONN_FAIL  	2
-#define         REDUND_TCP_OPEN   	3
-#define         REDUND_TCP_CONN          4
-#define         REDUND_TCP_CLOSE         5
-#define         REDUND_TCP_WAIT          6
-#define         REDUND_MPT_REOPEN        7
-#define         REDUND_TTY_WAIT          8
-#define         REDUND_RW_DATA           9
-#define         REDUND_REMOTE_LISTEN     10
-
-#define         REDUND_CONNECT_OK      0
-#define         REDUND_CONNECT_FAIL    1
-#define         REDUND_CLOSE_OK        2
-
-#define         REDUND_TCP_LISTEN      1
-#define         REDUND_TCP_CONNECTED   4
-
-#define         REDUND_ERROR_MPT_OPEN  0x0001
-#define         REDUND_ERROR_TCP_OPEN  0x0002
-#define         REDUND_ERROR_TCP_CONN  0x0004
-#define         REDUND_ERROR_FORK      0x0008
-
-extern void redund_handle_ttys();
 
 #endif /* _REDUND_H */

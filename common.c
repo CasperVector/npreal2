@@ -103,7 +103,7 @@ int	ipv6_str_to_ip(char *str, unsigned char *ip)
  */
 int poll_async_server_init()
 {
-	int			i, n, udp_port;
+	int			i, n;
 	struct sockaddr_in	sin;
 	struct sockaddr_in6	sin6;
 	struct sysinfo		sys_info;

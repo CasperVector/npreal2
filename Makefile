@@ -4,6 +4,7 @@ ASYNC_PATT = \
 	'ASYNCB_INITIALIZED|ASYNCB_CLOSING|ASYNCB_NORMAL_ACTIVE|ASYNCB_CHECK_CD'
 SCRIPTS = mxmkdrv mxaddsvr mxdelsvr mxloadsvr
 OBJS = npreal2d redund async_flags.h
+CFLAGS = -g -O2 -Wall
 
 ifdef POLLING
 CPPFLAGS += -DOFFLINE_POLLING

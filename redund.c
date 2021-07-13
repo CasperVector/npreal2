@@ -66,6 +66,7 @@ extern	char	*ptsname();
 #endif
 
 int	moxattyd_read_config(char *cfgpath);
+void redund_handle_ttys();
 int connect_nonb(int fd, struct sockaddr_in *sockaddr, socklen_t socklen, int usec);
 
 int redund_send_data(int fd, int fd_bk, const char *sbuf, ssize_t len, struct expect_struct *expect, TTYINFO *infop);
@@ -97,6 +98,7 @@ void _OpenTty(TTYINFO *infop);
 void redund_poll_nport_recv(int af_type);
 void redund_poll_nport_send(SERVINFO *servp);
 
+#define 	RET_OK				1
 #define 	REDUND_INIT			0
 #define 	REDUND_MPT_OPEN		1
 #define 	REDUND_CONN_FAIL 	2
@@ -418,20 +420,16 @@ char *	cfgpath;
 {
 	int		n, data, cmd;
 	FILE *		ConfigFd;
-	struct hostent *host;
 	TTYINFO *	infop;
 	char		buf[160];
-	char		ttyname[160],tcpport[16],cmdport[16];
-	char		ttyname2[160], curname[160], scope_id[10];
-	int			redundant_mode;
+	char		ttyname[20],tcpport[16],cmdport[16];
+	char		ttyname2[20], curname[160], scope_id[10];
 	int32_t		server_type,disable_fifo;
 #ifdef SSL_ON
 	int32_t		ssl_enable;
 #else
 	int32_t            temp;
 #endif
-
-	redundant_mode = 0;
 
 	/*
 	 * Prepare the full-path file names of LOG/Configuration.
@@ -590,17 +588,15 @@ char *	cfgpath;
 
 void redund_handle_ttys() /* child process ok */
 {
-	int			i, n, m, maxfd, t0, sndx, len, len1, j, ret;
+	int			i, n, m, maxfd, sndx, j, ret;
 	int			k;
 	TTYINFO   * infop, *infop_tmp;
-	SERVINFO  *	servp;
+	SERVINFO  *	servp = NULL;
 	fd_set		rfd, wfd, efd;
 	struct timeval	tm;
-	char		cmd_buf[CMD_REDUND_SIZE], buf[100];
-	ConnMsg 	msg;
+	char		cmd_buf[CMD_REDUND_SIZE];
 	int			tcp_wait_count;
 	struct sysinfo	sys_info;
-	int			test;
 
 	signal(SIGPIPE, SIG_IGN);	/* add for "broken pipe" error */
 
@@ -1075,7 +1071,6 @@ TTYINFO *	infop;
     int		on = 1;
     int 	af;
 	int		ret;
-	int		inter = 1;
     af = infop->af;
 
 	/* open first data socket */
@@ -1228,7 +1223,7 @@ TTYINFO *	infop;
 void redund_connect(infop)
 TTYINFO *	infop;
 {
-	int			childpid, n;
+	int			childpid;
 	ConnMsg 		msg;
 	union sock_addr sock, sock_bk;
 	int ret;
@@ -1371,7 +1366,6 @@ TTYINFO *	infop;
 void redund_close(infop)
 TTYINFO *	infop;
 {
-    struct sockaddr_in	sin;
     int			childpid;
     ConnMsg 		msg;
 
@@ -1477,23 +1471,19 @@ void redund_connect_check(TTYINFO *infopp)
             {
         		if (infop->redund.connect[0])
         			getsockname(infop->redund.sock_data[0], ptr, &socklen);
-        		else
-        			getsockname(infop->redund.sock_data[1], ptr, &socklen);
+        		else getsockname(infop->redund.sock_data[1], ptr, &socklen);
 
 				if(infop->af == AF_INET)
 	                infop->local_tcp_port = ntohs(local_sin.sin_port);
-				else
-					infop->local_tcp_port = ntohs(local_sin6.sin6_port);
+				else infop->local_tcp_port = ntohs(local_sin6.sin6_port);
 
 				if (infop->redund.connect[0])
         			getsockname(infop->redund.sock_cmd[0], ptr, &socklen);
-        		else
-        			getsockname(infop->redund.sock_cmd[1], ptr, &socklen);
+        		else getsockname(infop->redund.sock_cmd[1], ptr, &socklen);
 
 				if(infop->af == AF_INET)
 					infop->local_cmd_port = ntohs(local_sin.sin_port);
-				else
-					infop->local_cmd_port = ntohs(local_sin6.sin6_port);
+				else infop->local_cmd_port = ntohs(local_sin6.sin6_port);
                 
 				infop->state = REDUND_RW_DATA;
 
@@ -1585,7 +1575,7 @@ void redund_connect_check(TTYINFO *infopp)
 
 int redund_data_init(int fd, struct expect_struct *expect)
 {
-    int len1, len2, len3, i;
+    int len1, len2, len3;
     unsigned char rbuffer[HEADER_LEN];
     unsigned char wbuffer[HEADER_LEN];
 
@@ -1620,7 +1610,7 @@ int redund_data_init(int fd, struct expect_struct *expect)
 
 int redund_cmd_init(int fd, struct expect_struct *expect)
 {
-    int len1, len2, len3, i;
+    int len1, len2, len3;
     unsigned char rbuffer[HEADER_LEN];
     unsigned char wbuffer[HEADER_LEN];
 
@@ -1652,8 +1642,6 @@ int redund_cmd_init(int fd, struct expect_struct *expect)
 int redund_add_hdr(const char *sbuf, char *dbuf, ssize_t len, struct expect_struct *expect)
 {
     struct _redund_packet pkt;
-    int ret;
-    int i;
 
     pkt.hdr = (struct redund_hdr *) dbuf;
 	pkt.data = (char *) &dbuf[HEADER_LEN];
@@ -1682,14 +1670,12 @@ int redund_add_hdr(const char *sbuf, char *dbuf, ssize_t len, struct expect_stru
 
 int redund_send_cmd(int fd, int fd_bk, const char *sbuf, ssize_t len, struct expect_struct *expect)
 {
-    int i;
-    int ret, total_len1, total_len2;
+    int total_len1, total_len2;
     char dbuf[2048];
-    struct redund_packet resp;
 
     total_len1 = total_len2 = 0;
 	
-    ret = redund_add_hdr(sbuf, dbuf, len, expect);
+    redund_add_hdr(sbuf, dbuf, len, expect);
 	
 	/* send command to NPort */
 	if (fd) 
@@ -1706,24 +1692,20 @@ int redund_send_cmd(int fd, int fd_bk, const char *sbuf, ssize_t len, struct exp
     }
 	if (total_len1 == total_len2)
 		return total_len1;
-	else if (total_len1 > 0 && total_len2 <= 0)
+	else if (total_len1 > total_len2)
 		return total_len1;
-	else if (total_len2 > 0 && total_len1 <= 0)
+	else
 		return total_len2;
 }
 
 int redund_recv_cmd(int fd, int fd_bk ,char *sbuf, ssize_t len, struct expect_struct *expect, TTYINFO *infop)
 {
     int i;
-    int ret, data_len, total_len1, total_len2, ret_len;
+    int total_len1, total_len2, ret_len;
     char dbuf[BUF_SIZE], dbuf1[BUF_SIZE], dbuf2[BUF_SIZE], respbuf[BUF_SIZE];
     struct _redund_packet pkt;
     struct _redund_packet resp;
-    struct timeval tm;
-    fd_set rfd, wfd, efd;
-    uint16_t tmp;
 	
-    data_len = 0;
     total_len1 = 0;
     total_len2 = 0;
 
@@ -1817,7 +1799,7 @@ int redund_recv_cmd(int fd, int fd_bk ,char *sbuf, ssize_t len, struct expect_st
                     expect->seq = pkt.hdr->seq_no + 1;
 #endif
                 }
-                ret = send(fd, respbuf, HEADER_LEN, 0);
+                send(fd, respbuf, HEADER_LEN, 0);
             }
             if (fd_bk) {
                 infop->redund.cmd.repush_seq[1] = pkt.hdr->seq_no;
@@ -1835,7 +1817,7 @@ int redund_recv_cmd(int fd, int fd_bk ,char *sbuf, ssize_t len, struct expect_st
                     expect->seq = pkt.hdr->seq_no + 1;
 #endif
                 }
-                ret = send(fd_bk, respbuf, HEADER_LEN, 0);
+                send(fd_bk, respbuf, HEADER_LEN, 0);
             }
         }
 #if MOXA_DEBUG
@@ -1911,8 +1893,6 @@ re_send:
 void redund_add_hdr_data(int fd, const char *sbuf, char *dbuf, ssize_t len, struct expect_struct *expect, TTYINFO *infop)
 {
     struct _redund_packet pkt;
-    int ret;
-    int i;
 
     pkt.hdr = (struct redund_hdr *) dbuf;
 	pkt.data = (char *) &dbuf[HEADER_LEN];
@@ -1927,8 +1907,7 @@ void redund_add_hdr_data(int fd, const char *sbuf, char *dbuf, ssize_t len, stru
     pkt.hdr->len = HEADER_LEN + len;
 
 	expect->nport_ack = pkt.hdr->seq_no + 1;
-    if (len)
-        memcpy(pkt.data, sbuf, len);
+    if (len) memcpy(pkt.data, sbuf, len);
 	if (infop->redund.host_ack) {
     	pkt.hdr->flags |= REDUNDANT_ACK;
 		infop->redund.host_ack = 0;
@@ -1938,15 +1917,9 @@ void redund_add_hdr_data(int fd, const char *sbuf, char *dbuf, ssize_t len, stru
 
 int redund_send_data(int fd, int fd_bk, const char *sbuf, ssize_t len, struct expect_struct *expect, TTYINFO *infop)
 {
-    int i;
-    int total_len1, total_len2;
-    struct _redund_packet pkt;
+    int total_len1 = 0, total_len2 = 0;
     char dbuf[2048];
-	total_len1 = 0;
-
     redund_add_hdr_data(fd, sbuf, dbuf, len, expect, infop);
-	
-    pkt.hdr = (struct redund_hdr *) dbuf;
 
 	/* send command to NPort */
 	if (fd) 
@@ -1973,19 +1946,11 @@ int redund_send_data(int fd, int fd_bk, const char *sbuf, ssize_t len, struct ex
 int redund_recv_data(int fd, int fd_bk, char *sbuf, ssize_t len, 
 					 struct expect_struct *expect, TTYINFO *infop)
 {
-    int i;
-    int ret, data_len, total_len, ret_len;
+    int total_len, ret_len;
     char dbuf[2048], respbuf[2048];
 	char dbuf2[2048];
-	int	total_len2;
     struct _redund_packet pkt;
     struct _redund_packet resp;
-    struct timeval tm;
-    fd_set rfd, wfd, efd;
-    uint16_t tmp;
-	int test;
-	
-    data_len = 0;
     total_len = 0;
 
 	if (fd) {
@@ -2113,9 +2078,9 @@ int redund_recv_data(int fd, int fd_bk, char *sbuf, ssize_t len,
 #if 0
 		if (infop->redund.host_ack == 1) {
 			if (fd)
-	    		ret = send(fd, respbuf, resp.hdr->len, 0);
+	    		send(fd, respbuf, resp.hdr->len, 0);
 			if (fd_bk)
-    			ret = send(fd_bk, respbuf, resp.hdr->len, 0);
+    			send(fd_bk, respbuf, resp.hdr->len, 0);
 			infop->redund.host_ack = 0;
 		}
 #endif
@@ -2134,7 +2099,7 @@ int redund_recv_data(int fd, int fd_bk, char *sbuf, ssize_t len,
 			    	infop->redund.host_ack = 1;
 		        	infop->redund.host_ack = 0;
 			}
-		        ret = send(fd, respbuf, resp.hdr->len, 0);
+		        send(fd, respbuf, resp.hdr->len, 0);
 		}
 		if (fd_bk) {
 			infop->redund.data.repush_seq[1] = pkt.hdr->seq_no;
@@ -2148,7 +2113,7 @@ int redund_recv_data(int fd, int fd_bk, char *sbuf, ssize_t len,
 			    	    infop->redund.host_ack = 1;
 		      	            infop->redund.host_ack = 0;
 			}
-		        ret = send(fd_bk, respbuf, resp.hdr->len, 0);
+		        send(fd_bk, respbuf, resp.hdr->len, 0);
 		}
 
 #if 0
@@ -2163,7 +2128,7 @@ int redund_recv_data(int fd, int fd_bk, char *sbuf, ssize_t len,
    				resp.hdr->ack_no = expect->ack;
    	    		expect->seq = pkt.hdr->ack_no;
 				infop->redund.host_ack = 1;
-   				ret = send(fd_bk, respbuf, resp.hdr->len, 0);
+   				send(fd_bk, respbuf, resp.hdr->len, 0);
 				infop->redund.host_ack = 0;
 			}
 			if (fd) {
@@ -2183,7 +2148,7 @@ int redund_recv_data(int fd, int fd_bk, char *sbuf, ssize_t len,
    				resp.hdr->ack_no = expect->ack;
    	    		expect->seq = pkt.hdr->ack_no;
 				infop->redund.host_ack = 1;
-   				ret = send(fd, respbuf, resp.hdr->len, 0);
+   				send(fd, respbuf, resp.hdr->len, 0);
 				infop->redund.host_ack = 0;
 			}
 			if (fd_bk) {
@@ -2204,7 +2169,7 @@ int redund_recv_data(int fd, int fd_bk, char *sbuf, ssize_t len,
 	    		    resp.hdr->ack_no = expect->ack;
 	        		expect->seq = pkt.hdr->ack_no;
 		    	    infop->redund.host_ack = 1;
-    		        ret = send(fd, respbuf, resp.hdr->len, 0);
+    		        send(fd, respbuf, resp.hdr->len, 0);
 	        	    infop->redund.host_ack = 0;
 				}
 			}
@@ -2218,7 +2183,7 @@ int redund_recv_data(int fd, int fd_bk, char *sbuf, ssize_t len,
 	    		    resp.hdr->ack_no = expect->ack;
         			expect->seq = pkt.hdr->ack_no;
 		    	    infop->redund.host_ack = 1;
-    		        ret = send(fd_bk, respbuf, resp.hdr->len, 0);
+    		        send(fd_bk, respbuf, resp.hdr->len, 0);
 	    	        infop->redund.host_ack = 0;
 				}
 			}
@@ -2273,6 +2238,7 @@ int do_redund_send_data(TTYINFO *infop, SERVINFO *servp, struct sysinfo *sys_inf
         	log_event("Can not write data");
     	}
 	}
+	return -1;
 }
 
 int do_redund_recv_data(TTYINFO *infop, SERVINFO *servp, struct sysinfo *sys_info, fd_set *rfd)
@@ -2351,7 +2317,7 @@ int do_redund_recv_data(TTYINFO *infop, SERVINFO *servp, struct sysinfo *sys_inf
 
 int do_redund_send_cmd(TTYINFO *infop, int n)
 {
-	redund_send_cmd(infop->redund.sock_cmd[0], 
+	return redund_send_cmd(infop->redund.sock_cmd[0], 
 					infop->redund.sock_cmd[1],
 			    	infop->mpt_cmdbuf + 1, 
 					n - 1, 
@@ -2491,10 +2457,8 @@ int redund_reconnect(void *infopp)
 {
 	int ret;
 	int on;
-	union sock_addr sock, sock_bk;
+	union sock_addr sock;
 	TTYINFO *infop;
-	int		inter = 1, i;
-	struct timeval start, end;
 	struct sigaction act;
 
 	infop = (TTYINFO *) infopp;
@@ -2670,7 +2634,7 @@ int redund_reconnect(void *infopp)
 #if 1
 int do_redund_reconnect(TTYINFO * infop)
 {
-	int ret;
+	int ret = 0;
 
 	pthread_mutex_lock(&Gmutex);
 	if (!infop->redund.connect[0] || !infop->redund.connect[1]) {
@@ -2688,11 +2652,12 @@ create_again:
 		}
 	}	
 	pthread_mutex_unlock(&Gmutex);
+	return ret;
 }
 #else
 int do_redund_reconnect(TTYINFO * infop)
 {
-	int ret;
+	int ret = 0;
 
 	pthread_mutex_lock(&Gmutex);
 	if (!infop->redund.connect[0] && !infop->redund.close[0] && !infop->redund.thread[0]) {
@@ -2722,12 +2687,12 @@ create_again2:
 		}
 	}
 	pthread_mutex_unlock(&Gmutex);
+	return ret;
 }
 #endif
 
 int connect_nonb(int client_fd, struct sockaddr_in *server_addr, socklen_t slen, int nsec)
 {
-    int ret;
     int flags, n, error;
     socklen_t len;
     fd_set rset, wset;
@@ -2741,8 +2706,8 @@ int connect_nonb(int client_fd, struct sockaddr_in *server_addr, socklen_t slen,
 
     error = 0;
 
-    if (n = connect(client_fd, (struct sockaddr *)server_addr,
-              sizeof(struct sockaddr)) < 0) {
+    if ((n = connect(client_fd, (struct sockaddr *)server_addr,
+              sizeof(struct sockaddr))) < 0) {
         if (errno != EINPROGRESS) {
             //printf("connect fail (%d), (%s)\n", n, strerror(errno));
             return -1;
@@ -3041,8 +3006,8 @@ void redund_poll_nport_recv(int af_type)
     }
     for ( n=0, infop=ttys_info; n<ttys; n++, infop++ )
     {
-        u_short local_port, remote_port;
-        unsigned char status;
+        u_short local_port = 0, remote_port = 0;
+        unsigned char status = 0;
         if(servp->af == AF_INET)
         {
             if ( *(u_long*)infop->ip6_addr != *(u_long*)servp->ip6_addr )

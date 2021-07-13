@@ -79,7 +79,6 @@ int main(argc, argv)
 int	argc;
 char *	argv[];
 {
-	TTYINFO *	infop;
 	char ver[100];
 	char *cfgpath = "/etc/npreal2d.cf";
 	int		i;
@@ -329,7 +328,6 @@ char *	cfgpath;
 {
 	int		n, data, cmd;
 	FILE *		ConfigFd;
-	struct hostent *host;
 	TTYINFO *	infop;
 	char		buf[160];
 	char		ttyname[160],tcpport[16],cmdport[16];
@@ -689,7 +687,7 @@ void poll_async_server_recv()
 						(int)(msg[96]), (int)(msg[97]), (int)(msg[98]),
 						(int)(msg[99]), (int)(msg[95]), (int)(msg[94]));
 			 */
-			log_event(msg);
+			log_event((char *)msg);
 		}
 		return;
 	}
@@ -745,7 +743,7 @@ void poll_async_server_recv()
 		sprintf((char *)msg, "Ports reset of NPort(Async) Server %d.%d.%d.%d !",
 				(int)(msg[96]), (int)(msg[97]), (int)(msg[98]),
 				(int)(msg[99]));
-		log_event(msg);
+		log_event((char *)msg);
 	}
 }
 
@@ -1018,8 +1016,8 @@ int af_type;
 	}
 	for ( n=0, infop=ttys_info; n<ttys; n++, infop++ )
 	{
-		u_short local_port, remote_port;
-		unsigned char status;
+		u_short local_port = 0, remote_port = 0;
+		unsigned char status = 0;
 		if(servp->af == AF_INET)
 		{
 			if ( *(u_long*)infop->ip6_addr != *(u_long*)servp->ip6_addr )
@@ -1112,13 +1110,12 @@ int af_type;
  */
 void moxattyd_handle_ttys()
 {
-	int		i, n, m, maxfd, t0, sndx,len,len1,j;
+	int		i, n, m, maxfd, sndx,len,len1,j;
 	TTYINFO *	infop;
 	SERVINFO *	servp;
 	fd_set		rfd, wfd, efd;
 	struct timeval	tm;
-	char		cmd_buf[CMD_BUFFER_SIZE], buf[100];
-	ConnMsg 	msg;
+	char		cmd_buf[CMD_BUFFER_SIZE];
 	int		tcp_wait_count;
 	struct sysinfo	sys_info;
 
@@ -1803,7 +1800,7 @@ TTYINFO *	infop;
 void ConnectTcp(infop)
 TTYINFO *	infop;
 {
-	int			childpid, n;
+	int			childpid;
 	ConnMsg 		msg;
 	union sock_addr sock;
 
@@ -2078,7 +2075,6 @@ TTYINFO *	infop;
 void CloseTcp(infop)
 TTYINFO *	infop;
 {
-	struct sockaddr_in	sin;
 	int			childpid;
 	ConnMsg 		msg;
 
@@ -2274,10 +2270,9 @@ void ConnectCheck()
 
 int CheckConnecting()
 {
+#ifdef SSL_ON
 	TTYINFO * chk_infop;
 	int i;
-	
-#ifdef SSL_ON
 	for ( i=0, chk_infop=ttys_info; i<ttys; i+=1, chk_infop+=1 )
 	{
 		if( (chk_infop->state==STATE_SSL_CONN) ){
@@ -2285,6 +2280,5 @@ int CheckConnecting()
 		}       
 	}
 #endif
-
 	return 0;
 }
