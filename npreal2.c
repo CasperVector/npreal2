@@ -559,7 +559,7 @@ npreal_init_tty(void)
 		sprintf(buf,"%d",i);
 
 #if (LINUX_VERSION_CODE < VERSION_CODE(3,10,0))
-		de = npreal_create_proc_entry(buf, S_IRUGO | S_IWUGO | S_IFREG,
+		de = npreal_create_proc_entry(buf, 0660 | S_IFREG,
 				npvar_proc_root);
 		if ( !de )
 			return -ENOMEM;
@@ -570,7 +570,7 @@ npreal_init_tty(void)
 		net_node->node_entry = de;
 		net_node->flag = 0;
 #else
-		de = proc_create_data(buf, S_IRUGO | S_IWUGO | S_IFREG,
+		de = proc_create_data(buf, 0660 | S_IFREG,
 				npvar_proc_root, &npreal_net_fops, (void *) net_node);
 		if ( !de )
 			return -ENOMEM;

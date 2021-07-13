@@ -99,7 +99,7 @@ char *	argv[];
 {
 	TTYINFO *	infop;
 	char ver[100];
-	char *cfgpath = "/usr/lib/npreal2/driver/npreal2d.cf";
+	char *cfgpath = "/etc/npreal2d.cf";
 	int		i;
 
 	polling_fd = -1; /* Add by Ying */

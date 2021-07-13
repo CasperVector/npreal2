@@ -1,6 +1,6 @@
 #!/bin/sh
 
-CONFIG="${CONFIG:-/usr/lib/npreal2/driver/npreal2d.cf}"
+CONFIG="${CONFIG:-/etc/npreal2d.cf}"
 ttymajor=33
 calloutmajor=38
 
@@ -9,7 +9,8 @@ modprobe npreal2 ttymajor="$ttymajor" calloutmajor="$calloutmajor" verbose=0
 
 grep -vE '#|^$|ttymajor|calloutmajor' $CONFIG |
 while read minor server data cmd fifo ssl tty callout iface mode backup; do
-	mknod -m 666 /dev/"$tty" c "$ttymajor" "$minor"
-	mknod -m 666 /dev/"$callout" c "$calloutmajor" "$minor"
+	mknod -m 660 /dev/"$tty" c "$ttymajor" "$minor"
+	mknod -m 660 /dev/"$callout" c "$calloutmajor" "$minor"
+	chgrp dialout /dev/"$tty" /dev/"$callout"
 done
 

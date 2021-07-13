@@ -1,6 +1,6 @@
 #!/bin/sh
 
-CONFIG="${CONFIG:-/usr/lib/npreal2/driver/npreal2d.cf}"
+CONFIG="${CONFIG:-/etc/npreal2d.cf}"
 data0=950
 cmd0=966
 iface0='0'
