@@ -49,6 +49,7 @@
 #include <linux/interrupt.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
+#include <linux/serial_core.h>
 #include <linux/serial.h>
 #include <linux/serial_reg.h>
 #include <linux/major.h>
@@ -87,6 +88,9 @@
 #include <config/proc_fs.h>
 #endif
 
+#ifndef ASYNC_INITIALIZED
+#include "async_flags.h"
+#endif
 #include "np_ver.h"
 
 #if (LINUX_VERSION_CODE < VERSION_CODE(5,0,0))
@@ -375,7 +379,11 @@ static struct proc_dir_entry *  npvar_proc_root;
 static unsigned char *		npvar_tmp_buf;
 static struct semaphore 	npvar_tmp_buf_sem;
 
+#if LINUX_VERSION_CODE >= VERSION_CODE(5,6,0)
+static struct proc_ops npreal_net_fops;
+#else
 static struct file_operations npreal_net_fops;
+#endif
 
 #ifdef MODULE
 int		init_module(void);
@@ -677,13 +685,22 @@ npreal_init(void)
 	}
 
 	/* Initialize the net node structure */
-	memset(&npreal_net_fops,0,sizeof(struct file_operations));
+	memset(&npreal_net_fops,0,sizeof(npreal_net_fops));
+#if LINUX_VERSION_CODE >= VERSION_CODE(5,6,0)
+	npreal_net_fops.proc_read = npreal_net_read;
+	npreal_net_fops.proc_write = npreal_net_write;
+	npreal_net_fops.proc_ioctl = npreal_net_ioctl;
+	npreal_net_fops.proc_open = npreal_net_open;
+	npreal_net_fops.proc_release = npreal_net_close;
+	npreal_net_fops.proc_poll = npreal_net_select;
+#else
 	npreal_net_fops.read = npreal_net_read;
 	npreal_net_fops.write = npreal_net_write;
 	npreal_net_fops.unlocked_ioctl = npreal_net_ioctl;
 	npreal_net_fops.open = npreal_net_open;
 	npreal_net_fops.release = npreal_net_close;
 	npreal_net_fops.poll = npreal_net_select;
+#endif
 	if (npreal_init_tty() != 0)
 	{
 		tty_unregister_driver(DRV_VAR);
@@ -900,6 +917,7 @@ else
 	info->session = MX_SESSION();
 	info->pgrp = MX_CGRP();
 
+#if (LINUX_VERSION_CODE < VERSION_CODE(5,12,0))
 #if (LINUX_VERSION_CODE < VERSION_CODE(3,9,0))
 #if (LINUX_VERSION_CODE < VERSION_CODE(3,2,0))
 	/* It must be always on */
@@ -910,6 +928,7 @@ else
 #else
 	info->ttyPort.low_latency = 1;
 #endif /* 3,9,0 */
+#endif
 	return(0);
 }
 
@@ -3908,7 +3927,9 @@ npreal_net_write (
 		up(&info->rx_semaphore);
 		goto done;
 	}
-#if (LINUX_VERSION_CODE < VERSION_CODE(3,9,0))
+#if (LINUX_VERSION_CODE >= VERSION_CODE(5,12,0))
+	if(0) /* This code doesn't work without low latency support */
+#elif (LINUX_VERSION_CODE < VERSION_CODE(3,9,0))
 	if(!info->tty->low_latency)
 #else
 		if(!info->ttyPort.low_latency)
@@ -4183,7 +4204,9 @@ npreal_process_notify(
 			up (&info->rx_semaphore);
 			return;
 		}
-#if (LINUX_VERSION_CODE < VERSION_CODE(3,9,0))
+#if (LINUX_VERSION_CODE >= VERSION_CODE(5,12,0))
+		if(0) /* This code doesn't work without low latency support */
+#elif (LINUX_VERSION_CODE < VERSION_CODE(3,9,0))
 		if(!tty->low_latency)
 #else
 			if(!info->ttyPort.low_latency)
