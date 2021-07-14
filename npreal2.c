@@ -2868,35 +2868,22 @@ static int npreal_set_serial_info(struct npreal_struct * info,
 		return(-EFAULT);
 	if (copy_from_user(&new_serial, new_info, sizeof(new_serial)))
 		return(-EFAULT);
-
 	flags = info->flags & ASYNC_SPD_MASK;
 
-	if ( !capable(CAP_SYS_ADMIN))
-	{
-		if ((new_serial.close_delay != info->close_delay) ||
-				((new_serial.flags & ~ASYNC_USR_MASK) !=
-						(info->flags & ~ASYNC_USR_MASK)) )
-			return(-EPERM);
-		info->flags = ((info->flags & ~ASYNC_USR_MASK) |
-				(new_serial.flags & ASYNC_USR_MASK));
-	}
+	/*
+	 * OK, past this point, all the error checking has been done.
+	 * At this point, we start making changes.....
+	 */
+	info->flags = ((info->flags & ~ASYNC_FLAGS) |
+			(new_serial.flags & ASYNC_FLAGS));
+	info->close_delay = new_serial.close_delay * HZ/100;
+	// Scott: 2005-07-08
+	// If user wants to set closing_wait to ASYNC_CLOSING_WAIT_NONE, don't modify the value,
+	// since it will be used as a flag indicating closing wait none.
+	if (new_serial.closing_wait == ASYNC_CLOSING_WAIT_NONE)
+		info->closing_wait = ASYNC_CLOSING_WAIT_NONE;
 	else
-	{
-		/*
-		 * OK, past this point, all the error checking has been done.
-		 * At this point, we start making changes.....
-		 */
-		info->flags = ((info->flags & ~ASYNC_FLAGS) |
-				(new_serial.flags & ASYNC_FLAGS));
-		info->close_delay = new_serial.close_delay * HZ/100;
-		// Scott: 2005-07-08
-		// If user wants to set closing_wait to ASYNC_CLOSING_WAIT_NONE, don't modify the value,
-		// since it will be used as a flag indicating closing wait none.
-		if (new_serial.closing_wait == ASYNC_CLOSING_WAIT_NONE)
-			info->closing_wait = ASYNC_CLOSING_WAIT_NONE;
-		else
-			info->closing_wait = new_serial.closing_wait * HZ/100;
-	}
+		info->closing_wait = new_serial.closing_wait * HZ/100;
 
 	info->type = new_serial.type;
 	if (info->type == PORT_16550A)
@@ -3326,13 +3313,6 @@ npreal_net_open (
 #endif
 
 	MX_MOD_INC;
-
-	if ( !capable(CAP_SYS_ADMIN) )
-	{
-		rtn = -EPERM;
-		goto done;
-	}
-
 
 	/*
 	 *  Make sure that the "private_data" field hasn't already been used.

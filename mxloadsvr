@@ -6,6 +6,7 @@ calloutmajor=38
 
 rm -f /dev/ttyr* /dev/cur*
 modprobe npreal2 ttymajor="$ttymajor" calloutmajor="$calloutmajor" verbose=0
+chgrp npreal2 /proc/npreal2/*
 
 grep -vE '#|^$|ttymajor|calloutmajor' $CONFIG |
 while read minor server data cmd fifo ssl tty callout iface mode backup; do
