@@ -141,6 +141,7 @@ char *	argv[];
 #ifdef	O_NDELAY
 	fcntl(pipefd[0], F_SETFL, fcntl(pipefd[0], F_GETFL) | O_NDELAY);
 #endif
+	signal(SIGCLD, SIG_IGN);
 
 	sprintf(ver, "MOXA Real TTY daemon program starting (%s %s)...", NPREAL_VERSION, NPREAL_BUILD);
 	log_event(ver);

@@ -214,6 +214,8 @@ char *	argv[];
 		infop++;
 	}
 
+	signal(SIGCLD, SIG_IGN); /* Ignore signal if child process terminate. */
+
 	sprintf(ver, "MOXA Real TTY daemon program starting (%s %s)...", NPREAL_VERSION, NPREAL_BUILD);
 	log_event(ver);
 
