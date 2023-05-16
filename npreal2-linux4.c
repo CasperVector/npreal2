@@ -638,7 +638,7 @@ npreal_init_tty(void)
 		sprintf(buf,"%d",i);
 
 #if (LINUX_VERSION_CODE < VERSION_CODE(3,10,0))
-		de = npreal_create_proc_entry(buf, S_IRUGO | S_IWUGO | S_IFREG,
+		de = npreal_create_proc_entry(buf, 0660 | S_IFREG,
 				npvar_proc_root);
 		if ( !de )
 			return -ENOMEM;
@@ -649,7 +649,7 @@ npreal_init_tty(void)
 		net_node->node_entry = de;
 		net_node->flag = 0;
 #else
-		de = proc_create_data(buf, S_IRUGO | S_IWUGO | S_IFREG,
+		de = proc_create_data(buf, 0660 | S_IFREG,
 				npvar_proc_root, &npreal_net_fops, (void *) net_node);
 		if ( !de )
 			return -ENOMEM;
@@ -2933,35 +2933,22 @@ static int npreal_set_serial_info(struct npreal_struct * info,
 		return(-EFAULT);
 	if (copy_from_user(&new_serial, new_info, sizeof(new_serial)))
 		return(-EFAULT);
-
 	flags = info->ttyPort.flags & ASYNC_SPD_MASK;
 
-	if ( !capable(CAP_SYS_ADMIN))
-	{
-		if ((new_serial.close_delay != info->close_delay) ||
-				((new_serial.flags & ~ASYNC_USR_MASK) !=
-						(info->ttyPort.flags & ~ASYNC_USR_MASK)) )
-			return(-EPERM);
-		info->ttyPort.flags = ((info->ttyPort.flags & ~ASYNC_USR_MASK) |
-				(new_serial.flags & ASYNC_USR_MASK));
-	}
+	/*
+	 * OK, past this point, all the error checking has been done.
+	 * At this point, we start making changes.....
+	 */
+	info->ttyPort.flags = ((info->ttyPort.flags & ~ASYNC_FLAGS) |
+			(new_serial.flags & ASYNC_FLAGS));
+	info->close_delay = new_serial.close_delay * HZ/100;
+	// Scott: 2005-07-08
+	// If user wants to set closing_wait to ASYNC_CLOSING_WAIT_NONE, don't modify the value,
+	// since it will be used as a flag indicating closing wait none.
+	if (new_serial.closing_wait == ASYNC_CLOSING_WAIT_NONE)
+		info->closing_wait = ASYNC_CLOSING_WAIT_NONE;
 	else
-	{
-		/*
-		 * OK, past this point, all the error checking has been done.
-		 * At this point, we start making changes.....
-		 */
-		info->ttyPort.flags = ((info->ttyPort.flags & ~ASYNC_FLAGS) |
-				(new_serial.flags & ASYNC_FLAGS));
-		info->close_delay = new_serial.close_delay * HZ/100;
-		// Scott: 2005-07-08
-		// If user wants to set closing_wait to ASYNC_CLOSING_WAIT_NONE, don't modify the value,
-		// since it will be used as a flag indicating closing wait none.
-		if (new_serial.closing_wait == ASYNC_CLOSING_WAIT_NONE)
-			info->closing_wait = ASYNC_CLOSING_WAIT_NONE;
-		else
-			info->closing_wait = new_serial.closing_wait * HZ/100;
-	}
+		info->closing_wait = new_serial.closing_wait * HZ/100;
 
 	info->type = new_serial.type;
 	if (info->type == PORT_16550A)
@@ -3391,13 +3378,6 @@ npreal_net_open (
 #endif
 
 	MX_MOD_INC;
-
-	if ( !capable(CAP_SYS_ADMIN) )
-	{
-		rtn = -EPERM;
-		goto done;
-	}
-
 
 	/*
 	 *  Make sure that the "private_data" field hasn't already been used.
