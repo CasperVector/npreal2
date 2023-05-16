@@ -1,7 +1,6 @@
-Product:	NPort Real TTY Driver for Linux
-Version:	5.0 Build 19101416
-Date:		10/14/2019
-Company:	Moxa Inc.
+Product: NPort Real TTY Driver for Linux Kernel 5.x
+Revision Date: 07/23/2020
+Company: Moxa Inc.
 
 Supported Moxa Product:
 ------------------------

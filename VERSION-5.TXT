@@ -1,16 +1,45 @@
-Product:	NPort Linux Real TTY Driver 
-Version:	5.0 Build 19101814
-Date:		10/18/2019
-Company:	Moxa Inc.
-            
+Product: NPort Linux Real TTY Driver 
+Version: 5.2
+Date   : 12/14/2022
+Company: Moxa Inc.
+
 Release Note:
 =============
+ver5.2 Build 22121414
+1. Improve: Added the cmd_timeout parameter to mxinst to specify the customized
+            network timeout.
+2. Bugfix: Fix the compiler error on "implicit declaration of function
+           'PDE_DATA'" in Fedora 36, kernel 5.19.
+3. Bugfix: Fix the compile error about "error: implicit declaration of
+           function 'put_tty_driver' or 'alloc_tty_driver'" on Ubuntu 22.04,
+           kernel 5.15.
+4. Bugfix: Fix the compile error about "error: initialization of ‘unsigned int
+           (*)(struct tty_struct *)’ from incompatible pointer type ‘int
+           (*)(struct tty_struct *)’" in Fedora 35, kernel 5.14.
+5. Change: Downgraded software license from GPLv3 to GPLv2.
+6. Change: Revise the ARM_PORTING_GUIDE.txt because of license change.
+
+ver5.1 Build 21080410
+1. Improve: Add a optional udev rule to keep redundant ttys.
+2. Bugfix: Fix the slow startup and shutdown issues after ports are mapped.
+3. Bugfix: Fix a slow response problem when reading serial data from CN2650
+           in redundant mode.
+4. Bugfix: Fix errors while calling mxmknod out of driver directory.
+5. Bugfix: Fix mxinst error with polling parameter.
+6. Bugfix: Fixed driver occurs network timeout in a random execution time.
+7. Bugfix: Fixed driver causes system block few minutes after system reboot
+           or shutdown. 
+8. Bugfix: Fixed compile error due to "file_operations" structure does not
+           support start from kernel 5.6.
+9. Bugfix: Fixed driver occurs network timeout in a random execution time.
+10. Change: Not support legacy init startup service (system V).
+
 ver5.0 Build 19101814
 1. New: Support systemd process to load driver. 
 2. Improve: The connections of opened TTY ports will not be disconnected then
             reconnected when adding or removing servers. The related
-	    description is also removed in README.txt due to the users are not
-	    required to manually send SIGUSR1 to activate configuration changes.
+            description is also removed in README.txt due to the users are not
+            required to manually send SIGUSR1 to activate configuration changes.
 3. Improve: Supports Virtual Machine, ESXi v6.7.0 is tested with guest OS
             Ubuntu 18.10 x64 and Ubuntu 19.04 x64.
 4. Improve: Supports ARM based Linux, with Raspbian is tested.

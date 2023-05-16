@@ -1,0 +1,10 @@
+Product: NPort Linux Real TTY Driver 
+Version: 6.0
+Date   : 03/29/2023
+Company: Moxa Inc.
+
+Release Note:
+=============
+Ver6.0 Build 23032913
+New: 
+1. First release.

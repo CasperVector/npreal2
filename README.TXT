@@ -7,12 +7,13 @@ Email: support@moxa.com.tw
 Background
 ----------
 
-Using this driver, you can use NPort serial ports as local tty ports.  This
-driver works with Linux kernel 3.x, 4.x or 5.x.  Before using this software,
-make sure the IP configuration of the NPort is correct and you can access (ping,
-telnet, ...) it successfully.  For the Real COM Mode and the Redundant COM Mode,
-you need to set the operation mode of your NPort correspondingly; the latter
-mode is only available with certain series of products.
+Using this driver, you can use NPort serial ports as local tty ports.
+This driver works with Linux kernel 3.x, 4.x, 5.x and 6.x.  Before using
+this software, make sure the IP configuration of the NPort is correct and
+you can access (ping, telnet, ...) it successfully.  For the Real COM Mode
+and the Redundant COM Mode, you need to set the operation mode of your
+NPort correspondingly; the latter mode is only available with certain
+series of products.
 
 
 Preparation
