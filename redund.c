@@ -41,6 +41,8 @@
 #include	"redund.h"
 #include    "npreal2d.h"
 
+//#define		MOXA_DEBUG 1
+
 #define		CON_TIME			1000000 /* connection time   : micro-second */
 #define		RE_TIME				5000000 /* reconnection time : micro-second */
 //#define		Gsession			0x01
@@ -432,6 +434,7 @@ char *	cfgpath;
 #else
 	int32_t            temp;
 #endif
+	char		tmpstr[256];
 
 	/*
 	 * Prepare the full-path file names of LOG/Configuration.
@@ -523,7 +526,9 @@ char *	cfgpath;
 		}
 
 		//        server_type = CN2500;
-		sprintf(infop->mpt_name,"/proc/npreal2/%s",ttyname);
+		sprintf(tmpstr,"/proc/npreal2/%s",ttyname);
+		memset(infop->mpt_name, 0, sizeof(infop->mpt_name));
+		memcpy(infop->mpt_name, tmpstr, sizeof(infop->mpt_name)-1);
 		resolve_dns_host_name(infop);
 
 		if ( (data = atoi(tcpport)) <= 0 || data >= 10000 )
@@ -2003,11 +2008,7 @@ int redund_recv_data(int fd, int fd_bk, char *sbuf, ssize_t len,
 		return -1;
 	}
 #if MOXA_DEBUG
-#if 0
-	printf("[AP]recv len = %d, len2 = %d, ack_no = %d, pkt.hdr->len = %d, pkt.hdr->flags = %d, pkt.hdr->seq_no = %d, expect->ack = %d, nport->ack = %d\n", 
-					total_len, total_len, 
-					pkt.hdr->ack_no, pkt.hdr->len, pkt.hdr->flags, pkt.hdr->seq_no, expect->ack, expect->nport_ack);
-#endif
+	printf("[AP]recv len = %d, ack_no = %d, hdr_len = %d, hdr_flags = %d, hdr_seq_no = %d, expect_ack = %d, nport_ack = %d\n", total_len, pkt.hdr->ack_no, pkt.hdr->len, pkt.hdr->flags, pkt.hdr->seq_no, expect->ack, expect->nport_ack);
 #endif
 
 	if ((pkt.hdr->seq_no != expect->ack) && ((pkt.hdr->flags & REDUNDANT_PUSH))) { 
@@ -2077,7 +2078,7 @@ int redund_recv_data(int fd, int fd_bk, char *sbuf, ssize_t len,
     	resp.hdr->ack_no = expect->ack;
         expect->seq = pkt.hdr->ack_no;
 		infop->redund.host_ack = 1;
-#if 0
+#if 1 /* open this code otherwise the ack will not sent while receiving data */
 		if (infop->redund.host_ack == 1) {
 			if (fd)
 	    		send(fd, respbuf, resp.hdr->len, 0);

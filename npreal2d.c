@@ -491,7 +491,10 @@ char *	cfgpath;
 		}
 
 		//server_type = CN2500;
-		sprintf(infop->mpt_name,"/proc/npreal2/%s",ttyname);
+
+		sprintf(tmpstr, "/proc/npreal2/%s", ttyname);
+		memset(infop->mpt_name, 0, sizeof(infop->mpt_name));
+		memcpy(infop->mpt_name, tmpstr, sizeof(infop->mpt_name)-1); 
 
 		resolve_dns_host_name(infop);
 
@@ -665,15 +668,19 @@ void poll_async_server_recv()
 			msg[93] = msg[23];
 			msg[94] = msg[24];
 			msg[95] = msg[25];
+
+			char *log_msg;
+			log_msg = (char *)malloc(100);
+
 			if (msg[93]) /* x.x.[x] */
-				sprintf((char *)msg,
+				sprintf(log_msg,
 						"IP=%d.%d.%d.%d, Ver=%x.%x.%x[0x%02x%02x%02x] is alive.",
 						(int)(msg[96]), (int)(msg[97]), (int)(msg[98]),
 						(int)(msg[99]), (int)(msg[95]), (int)(msg[94]),
 						(int)(msg[93]), (int)(msg[95]), (int)(msg[94]),
 						(int)(msg[93]));
 			else
-				sprintf((char *)msg,
+				sprintf(log_msg,
 						"IP=%d.%d.%d.%d, Ver=%x.%x(0x%02x%02x) is alive.",
 						(int)(msg[96]), (int)(msg[97]), (int)(msg[98]),
 						(int)(msg[99]), (int)(msg[95]), (int)(msg[94]),
@@ -688,7 +695,8 @@ void poll_async_server_recv()
 						(int)(msg[96]), (int)(msg[97]), (int)(msg[98]),
 						(int)(msg[99]), (int)(msg[95]), (int)(msg[94]));
 			 */
-			log_event((char *)msg);
+			log_event(log_msg);
+			free(log_msg);
 		}
 		return;
 	}
@@ -740,11 +748,14 @@ void poll_async_server_recv()
 	}
 	if ( m )
 	{
+		char *log_msg;
+		log_msg = (char *)malloc(100);
 		*(uint32_t *)(&msg[96]) = *(u_long*)servp->ip6_addr;
-		sprintf((char *)msg, "Ports reset of NPort(Async) Server %d.%d.%d.%d !",
+		sprintf(log_msg, "Ports reset of NPort(Async) Server %d.%d.%d.%d !",
 				(int)(msg[96]), (int)(msg[97]), (int)(msg[98]),
 				(int)(msg[99]));
-		log_event((char *)msg);
+		log_event(log_msg);
+		free(log_msg);
 	}
 }
 
@@ -1341,6 +1352,7 @@ void moxattyd_handle_ttys()
 #endif
 							//system(mm);
 
+//system("logger 'TTY USED'");
 							if (infop->state != STATE_TTY_WAIT)
 							{
 #ifdef SSL_ON
@@ -1377,7 +1389,7 @@ void moxattyd_handle_ttys()
 							//sprintf(mm, "logger \"CFD>(%d) CMD_TTY_UNUSED\"", infop->tcp_port);
 #endif
 							//system(mm);
-
+//system("logger 'TTY UNUSED'");
 #ifdef SSL_ON
 							if (infop->ssl_enable)
 							{
