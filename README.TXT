@@ -56,7 +56,7 @@ For example, the following command
 will add 16 tty ports, all with IP address `192.168.3.4', with data ports
 4001, 4002, ..., 4016 and command ports 966, 967, ..., 981, respectively.
 The following command
-# mxaddsvr 192.168.3.4 16 4001 966
+# mxdelsvr 192.168.3.4
 will remove all tty ports associated with `192.168.3.4'.
 
 
